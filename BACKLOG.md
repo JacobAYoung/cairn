@@ -156,7 +156,9 @@ scheduled; promote into a phase when it proves worth the weight.
       location in `~/.config/cairn/location` (no env var needed). Recipes documented in the README.
 
 *Growth (later, flag caution):*
-- [ ] **#5.9** Shareable profiles — `cairn install <url>` a bundle a friend can use (the personal→friends path).
+- [x] **#5.9** Shareable profiles — `cairn export <profile> <dir>` packages a flattened profile + its
+      skills/memories/mcp into a bundle (JSON manifest + assets); `cairn install <git-url|dir>` clones
+      (injectable cloner) and merges it into the vault, skipping existing names. `bundle.py`, 5 + 2 tests.
 - [ ] **#5.10** Shared/team read-only vault overlay — real, but drifts toward platform territory; park it.
 
 **Explicitly resisting (scope discipline):** no full auto-router · no note-editing UI (Obsidian's lane) ·

@@ -76,6 +76,7 @@ Claude for now.
 | `cairn sync-memory [--off]` | Point Claude's auto-memory at the synced vault |
 | `cairn send <machine> "<msg>"` · `cairn inbox [--read]` | Cross-machine messages (Tier-0) |
 | `cairn handoff <machine>` · `cairn resume` | Carry active profile + latest brief to another machine |
+| `cairn export <profile> <dir>` · `cairn install <url\|dir>` | Share a profile bundle (e.g. via GitHub) |
 | `cairn session-start` | Internal SessionStart hook target (auto-activates default + injects brief) |
 
 ## Configuration
@@ -134,6 +135,13 @@ cairn init --vault-path ~/cairn-vault --sync git   # then `git init` + add a rem
 `cairn` wraps pull/commit/push; run any command and sync is best-effort in the background.
 
 **Second machine:** `pipx install cairn && cairn init --vault-path <same synced path>`.
+
+**Share a profile with a friend:**
+```bash
+cairn export dev-heavy ./dev-heavy-bundle   # then push that dir to a GitHub repo
+# your friend:
+cairn install https://github.com/you/dev-heavy-bundle
+```
 
 ## Design principles
 

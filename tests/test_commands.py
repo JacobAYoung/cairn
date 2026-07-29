@@ -18,10 +18,12 @@ from cairn.commands import (
     CheckpointCommand,
     ClearCommand,
     DoctorCommand,
+    ExportCommand,
     HandoffCommand,
     ImportCommand,
     InboxCommand,
     InitCommand,
+    InstallCommand,
     LsCommand,
     RecallCommand,
     ResumeCommand,
@@ -225,6 +227,50 @@ def test_handoff_then_resume_carries_profile_and_brief(env, capsys):
 def test_resume_reports_nothing_when_no_handoff(env, capsys):
     main(["resume"], commands=[env["make"](ResumeCommand)])
     assert "No handoff waiting." in capsys.readouterr().out
+
+
+def test_export_then_install_via_cli(env, capsys, tmp_path):
+    # Export dev-heavy from the fixture vault to a bundle dir
+    bundle = tmp_path / "bundle"
+    code = main(["export", "dev-heavy", str(bundle)], commands=[env["make"](ExportCommand)])
+    assert code == 0
+    assert (bundle / "cairn-bundle.json").exists()
+    capsys.readouterr()
+
+    # Install it into a *different* fresh vault via a local path
+    dest_vault = tmp_path / "dest-vault"
+    installer = InstallCommand(vault_root=lambda: dest_vault, cwd=lambda: env["project"])
+    code = main(["install", str(bundle)], commands=[installer])
+
+    assert code == 0
+    assert "1 profile(s)" in capsys.readouterr().out
+    assert (dest_vault / "skills" / "develop").is_dir()
+    assert "dev-heavy" in (dest_vault / "profiles.toml").read_text()
+
+
+def test_install_from_url_uses_injected_cloner(env, capsys, tmp_path):
+    # Prepare a bundle that the fake cloner will "clone" (copy) into place
+    bundle = tmp_path / "bundle"
+    main(["export", "dev-heavy", str(bundle)], commands=[env["make"](ExportCommand)])
+    capsys.readouterr()
+
+    import shutil
+
+    def fake_cloner(url, dest):
+        assert url == "https://github.com/someone/cairn-dev-heavy"
+        shutil.copytree(bundle, dest)
+
+    dest_vault = tmp_path / "dest2"
+    installer = InstallCommand(
+        vault_root=lambda: dest_vault, cwd=lambda: env["project"], cloner=fake_cloner
+    )
+    code = main(
+        ["install", "https://github.com/someone/cairn-dev-heavy"], commands=[installer]
+    )
+
+    assert code == 0
+    assert (dest_vault / "profiles.toml").exists()
+    assert "dev-heavy" in (dest_vault / "profiles.toml").read_text()
 
 
 def test_init_scaffolds_vault_and_wires_claude(env, capsys, tmp_path):

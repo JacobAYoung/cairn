@@ -14,7 +14,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +25,7 @@ from pathlib import Path
 from cairn.activation import activate, deactivate, read_state, resolve_bundle
 from cairn.automemory import disable as auto_disable
 from cairn.automemory import enable as auto_enable
+from cairn.bundle import export_bundle, install_bundle
 from cairn.checkpoints import latest_brief, write_checkpoint
 from cairn.claude_setup import install_session_start_hook, install_skill
 from cairn.config import CairnConfig, load_cairn_config, load_profiles
@@ -402,6 +406,71 @@ class InboxCommand(_Base):
         return 0
 
 
+def _git_clone(url: str, dest: Path) -> None:
+    """Shallow-clone ``url`` into ``dest``; raise CairnError on failure."""
+    result = subprocess.run(
+        ["git", "clone", "--depth", "1", url, str(dest)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise CairnError(f"git clone failed: {result.stderr.strip() or url}")
+
+
+class ExportCommand(_Base):
+    name = "export"
+    help = "Package a profile (+ its skills/memories) into a shareable bundle directory."
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("profile", help="profile to export")
+        parser.add_argument("dest", type=Path, help="directory to write the bundle into")
+
+    def run(self, args: argparse.Namespace) -> int:
+        vault = self.vault()
+        profiles = load_profiles(vault.profiles_path)
+        result = export_bundle(vault, profiles, args.profile, args.dest)
+        print(f"Exported '{result.profile}' -> {result.dest}")
+        print(f"  skills:   {', '.join(result.skills) or '(none)'}")
+        print(f"  memories: {', '.join(result.memories) or '(none)'}")
+        print("Push that directory to GitHub; others run `cairn install <url>`.")
+        return 0
+
+
+class InstallCommand(_Base):
+    name = "install"
+    help = "Install a shared bundle from a git URL or local directory into your vault."
+
+    def __init__(self, *, cloner=_git_clone, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._clone = cloner  # injectable so the URL path is testable without network
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("source", help="git URL (e.g. GitHub) or a local bundle directory")
+
+    def run(self, args: argparse.Namespace) -> int:
+        vault = self.vault()
+        local = Path(args.source).expanduser()
+        if local.is_dir():
+            result = install_bundle(vault, local)
+        else:
+            tmp = Path(tempfile.mkdtemp(prefix="cairn-install-"))
+            try:
+                self._clone(args.source, tmp / "bundle")
+                result = install_bundle(vault, tmp / "bundle")
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+        print(
+            f"Installed: {len(result.profiles_added)} profile(s), "
+            f"{len(result.skills_added)} skill(s), {len(result.memories_added)} memory(ies); "
+            f"skipped {len(result.skipped)}."
+        )
+        for pname in result.profiles_added:
+            print(f"  + profile {pname}")
+        return 0
+
+
 class InitCommand(_Base):
     name = "init"
     help = "One-time setup: scaffold the vault, import existing skills/memories, wire Claude."
@@ -482,6 +551,8 @@ def all_commands() -> list:
     return [
         InitCommand(),
         ImportCommand(),
+        ExportCommand(),
+        InstallCommand(),
         UseCommand(),
         ClearCommand(),
         StatusCommand(),
