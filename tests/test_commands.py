@@ -19,8 +19,10 @@ from cairn.commands import (
     ClearCommand,
     ImportCommand,
     InboxCommand,
+    InitCommand,
     LsCommand,
     SendCommand,
+    SessionStartCommand,
     StatusCommand,
     SyncMemoryCommand,
     UseCommand,
@@ -195,3 +197,47 @@ def test_send_then_inbox_roundtrip(env, capsys):
     out = capsys.readouterr().out
     assert "ping from me" in out
     assert "from testbox" in out
+
+
+def test_init_scaffolds_vault_and_wires_claude(env, capsys, tmp_path):
+    # Arrange: a fresh vault root + temp Claude dir with an existing skill to import
+    fresh_vault = tmp_path / "fresh-vault"
+    claude_dir = tmp_path / "claude"
+    (claude_dir / "skills" / "myskill").mkdir(parents=True)
+    (claude_dir / "skills" / "myskill" / "SKILL.md").write_text("x")
+
+    init = InitCommand(vault_root=lambda: fresh_vault, cwd=lambda: env["project"], now=lambda: "T0")
+
+    # Act
+    code = main(
+        ["init", "--claude-dir", str(claude_dir), "--sync", "folder"], commands=[init]
+    )
+
+    # Assert: config scaffolded, existing skill imported, cairn skill + hook installed
+    assert code == 0
+    assert (fresh_vault / "cairn.toml").exists()
+    assert (fresh_vault / "profiles.toml").exists()
+    assert (fresh_vault / "skills" / "myskill").is_dir()  # imported
+    assert (claude_dir / "skills" / "cairn" / "SKILL.md").exists()  # bundled skill installed
+    settings = json.loads((claude_dir / "settings.json").read_text())
+    hooks = settings["hooks"]["SessionStart"][0]["hooks"]
+    assert hooks[0]["command"] == "cairn session-start"
+
+
+def test_session_start_emits_json_for_active_profile(env, capsys):
+    main(["use", "dev-heavy"], commands=[env["make"](UseCommand)])
+    capsys.readouterr()
+
+    # Act
+    main(["session-start"], commands=[env["make"](SessionStartCommand)])
+
+    # Assert: valid JSON naming the active profile + reloadSkills
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["hookSpecificOutput"]["reloadSkills"] is True
+    assert "dev-heavy" in payload["hookSpecificOutput"]["additionalContext"]
+
+
+def test_session_start_emits_empty_json_when_nothing_active(env, capsys):
+    # No profile active, no default configured in the fixture, no checkpoint
+    main(["session-start"], commands=[env["make"](SessionStartCommand)])
+    assert json.loads(capsys.readouterr().out) == {}

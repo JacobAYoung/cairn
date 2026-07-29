@@ -98,7 +98,14 @@ These are not a phase; they are the definition of done for all work.
       need appears.
 
 ## Phase 4 — Distribution & polish
-- [ ] **#4.1** Ship the bundled Cairn skill so Claude knows the commands exist and when to use them.
+- [x] **#4.0** `cairn init` — one-time setup: scaffold vault + starter config (with a `default` profile
+      and `[defaults].profile`), import existing `~/.claude` skills/memories, install the bundled skill,
+      and merge a `SessionStart` hook into `~/.claude/settings.json` (non-destructive). Plus
+      `cairn session-start` (hook target) that **auto-activates the default profile** and injects the
+      latest warm-start brief with `reloadSkills` so it takes effect *this* session. `scaffold.py`,
+      `claude_setup.py`, `session_start.py`; 14 tests. Verified end-to-end against temp dirs.
+- [x] **#4.1** Bundled Cairn skill (`src/cairn/data/skill/SKILL.md`) — teaches Claude when to reach for
+      `ask`/`checkpoint`/`use`/`send`. Installed by `cairn init`.
 - [ ] **#4.2** Full docs pass: README, command reference, quickstart, config reference.
 - [ ] **#4.3** Packaging: pipx install path proven; single-binary path scoped for later.
 - [ ] **#4.4** Positioning section in SPEC (wedge = profiles + cross-machine; non-goals = don't compete as
@@ -134,6 +141,13 @@ scheduled; promote into a phase when it proves worth the weight.
       (Cursor, Codex, Gemini CLI, …) can be activation targets. Everything else is already
       agent-neutral: vault, profiles, sync, mailbox, warm-start, and `cairn ask` (any local model).
       Focus stays Claude for now; this is the future-proofing note.
+
+*Vault backends — shared drive / git repo (single-user, multi-machine-optional):*
+- [ ] **#5.12** Vault on a shared network drive or git repo. **Already possible today**: point
+      `CAIRN_HOME` at a mounted network drive (with `[sync].mode = "folder"`) or use
+      `[sync].mode = "git"` for a git-repo vault. Enhancement: a `[vault].path` config key so the vault
+      location is set in config (not just the env var), plus documented recipes for "network drive as
+      vault" and "git repo as vault." Serves the single-machine-but-shared-storage case.
 
 *Growth (later, flag caution):*
 - [ ] **#5.9** Shareable profiles — `cairn install <url>` a bundle a friend can use (the personal→friends path).

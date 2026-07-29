@@ -14,13 +14,22 @@ local models (free tokens) and keeps warm-start notes so new sessions skip expen
 > Status: **early scaffolding.** The CLI dispatch layer and packaging are in place; real
 > subcommands (`use`, `status`, `ask`, …) are landing per the backlog.
 
-## Install
+## Install & set up
 
-End users (once published):
+Two one-time commands per machine:
 
 ```bash
-pipx install cairn
+pipx install cairn     # once published
+cairn init             # scaffold the vault, import your ~/.claude skills/memories,
+                       # install the Cairn skill + a SessionStart hook into ~/.claude
 ```
+
+After that, edit the `default` profile in `~/.cairn/profiles.toml`. From then on it's automatic:
+every Claude session runs the hook, which auto-activates your default profile and loads your latest
+warm-start note — no per-session commands. Switch setups per project with `cairn use <profile>`.
+
+**Vault on a shared drive or git repo (single user, one or many machines):** point `CAIRN_HOME` at a
+synced/network folder with `[sync].mode = "folder"`, or use `[sync].mode = "git"` for a git-repo vault.
 
 ## Develop
 

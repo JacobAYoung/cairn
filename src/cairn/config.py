@@ -80,6 +80,7 @@ class CairnConfig:
     sync: SyncConfig
     delegate: DelegateConfig
     bridge: BridgeConfig
+    default_profile: str | None = None
 
 
 def _read_toml(path: Path) -> dict:
@@ -117,10 +118,10 @@ def load_cairn_config(path: Path, *, default_machine_name: str) -> CairnConfig:
         raise ConfigError(
             f"[sync].mode must be one of {', '.join(VALID_SYNC_MODES)}; got {mode!r}"
         )
+    # `path` is optional and reserved: with folder/syncthing the vault root itself is what an
+    # external tool syncs, so no separate path is needed. Parsed (and ~-expanded) if present.
     raw_path = sync_raw.get("path")
     sync_path = Path(raw_path).expanduser() if isinstance(raw_path, str) else None
-    if mode == "folder" and sync_path is None:
-        raise ConfigError("[sync].path is required when [sync].mode = 'folder'")
 
     delegate_raw = data.get("delegate", {})
     tasks = delegate_raw.get("tasks", {})
@@ -134,6 +135,10 @@ def load_cairn_config(path: Path, *, default_machine_name: str) -> CairnConfig:
     if not isinstance(port, int) or isinstance(port, bool) or not (1 <= port <= 65535):
         raise ConfigError("[bridge].port must be an integer between 1 and 65535")
 
+    default_profile = data.get("defaults", {}).get("profile")
+    if default_profile is not None and not isinstance(default_profile, str):
+        raise ConfigError("[defaults].profile must be a string")
+
     return CairnConfig(
         machine=MachineConfig(name=machine_name),
         sync=SyncConfig(mode=mode, path=sync_path),
@@ -144,6 +149,7 @@ def load_cairn_config(path: Path, *, default_machine_name: str) -> CairnConfig:
             tasks=dict(tasks),
         ),
         bridge=BridgeConfig(enabled=bool(bridge_raw.get("enabled", False)), port=port),
+        default_profile=default_profile,
     )
 
 

@@ -12,6 +12,8 @@ test can drive a command against a temp vault/project without monkeypatching glo
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 from collections.abc import Callable
 from datetime import datetime
@@ -21,6 +23,7 @@ from cairn.activation import activate, deactivate, read_state, resolve_bundle
 from cairn.automemory import disable as auto_disable
 from cairn.automemory import enable as auto_enable
 from cairn.checkpoints import latest_brief, write_checkpoint
+from cairn.claude_setup import install_session_start_hook, install_skill
 from cairn.config import CairnConfig, load_cairn_config, load_profiles
 from cairn.delegate import Delegator
 from cairn.errors import CairnError
@@ -28,6 +31,8 @@ from cairn.importer import import_into_vault
 from cairn.mailbox import inbox as read_inbox
 from cairn.mailbox import mark_read
 from cairn.mailbox import send as send_message
+from cairn.scaffold import write_starter_config
+from cairn.session_start import build_session_start_output
 from cairn.sync import make_sync_backend
 from cairn.system import default_machine_name, default_vault_root
 from cairn.vault import Vault
@@ -296,9 +301,78 @@ class InboxCommand(_Base):
         return 0
 
 
+class InitCommand(_Base):
+    name = "init"
+    help = "One-time setup: scaffold the vault, import existing skills/memories, wire Claude."
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "--claude-dir",
+            type=Path,
+            default=Path.home() / ".claude",
+            help="Claude Code config dir to wire (default: ~/.claude)",
+        )
+        parser.add_argument(
+            "--sync", default="off", help="sync mode for the starter config (default: off)"
+        )
+        parser.add_argument(
+            "--skills",
+            type=Path,
+            default=None,
+            help="skills dir to import (default: <claude-dir>/skills)",
+        )
+        parser.add_argument("--memories", type=Path, default=None, help="memories dir to import")
+
+    def run(self, args: argparse.Namespace) -> int:
+        vault = self.vault()
+        claude_dir = args.claude_dir
+        skills_src = args.skills if args.skills is not None else claude_dir / "skills"
+
+        created = write_starter_config(
+            vault, machine=default_machine_name(), sync_mode=args.sync
+        )
+        imported = import_into_vault(vault, skills_src=skills_src, memories_src=args.memories)
+        skill_dest = install_skill(claude_dir / "skills")
+        hook_added = install_session_start_hook(claude_dir / "settings.json")
+
+        print(f"Cairn initialized at {vault.root}")
+        print(f"  config:    {', '.join(created) or 'already present'}")
+        print(
+            f"  imported:  {len(imported.skills_imported)} skill(s), "
+            f"{len(imported.memories_imported)} memory(ies)"
+        )
+        print(f"  skill:     installed -> {skill_dest}")
+        print(f"  hook:      {'installed' if hook_added else 'already present'} (SessionStart)")
+        print("\nNext: edit the `default` profile in profiles.toml, then start a Claude session.")
+        return 0
+
+
+class SessionStartCommand(_Base):
+    name = "session-start"
+    help = "(internal) SessionStart hook target — emits JSON for Claude Code."
+
+    def run(self, args: argparse.Namespace) -> int:
+        # A hook must NEVER break the session: swallow everything and emit empty JSON on failure.
+        try:
+            vault = self.vault()
+            project_dir = Path(os.environ.get("CLAUDE_PROJECT_DIR", str(self._cwd())))
+            config = load_cairn_config(
+                vault.cairn_config_path, default_machine_name=default_machine_name()
+            )
+            profiles = load_profiles(vault.profiles_path)
+            output = build_session_start_output(
+                vault, project_dir, config, profiles, now=self._now()
+            )
+        except Exception:
+            output = {}
+        print(json.dumps(output))
+        return 0
+
+
 def all_commands() -> list:
     """The registered command set, in help-display order."""
     return [
+        InitCommand(),
         ImportCommand(),
         UseCommand(),
         ClearCommand(),
@@ -310,4 +384,5 @@ def all_commands() -> list:
         SyncMemoryCommand(),
         SendCommand(),
         InboxCommand(),
+        SessionStartCommand(),
     ]

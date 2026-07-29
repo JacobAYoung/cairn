@@ -80,6 +80,16 @@ def test_missing_file_yields_documented_defaults(tmp_path):
     assert config.delegate.tasks == {}
     assert config.bridge.enabled is False
     assert config.bridge.port == DEFAULT_BRIDGE_PORT
+    assert config.default_profile is None
+
+
+def test_default_profile_parsed_and_validated(tmp_path):
+    ok = _write(tmp_path / "cairn.toml", '[defaults]\nprofile = "dev-heavy"\n')
+    assert load_cairn_config(ok, default_machine_name="h").default_profile == "dev-heavy"
+
+    bad = _write(tmp_path / "bad.toml", "[defaults]\nprofile = 7\n")
+    with pytest.raises(ConfigError, match="defaults..profile must be a string"):
+        load_cairn_config(bad, default_machine_name="h")
 
 
 def test_invalid_sync_mode_raises(tmp_path):
@@ -88,10 +98,12 @@ def test_invalid_sync_mode_raises(tmp_path):
         load_cairn_config(path, default_machine_name="h")
 
 
-def test_folder_mode_without_path_raises(tmp_path):
+def test_folder_mode_without_path_is_valid(tmp_path):
+    # folder/syncthing sync the vault root itself, so no separate path is required
     path = _write(tmp_path / "cairn.toml", '[sync]\nmode = "folder"\n')
-    with pytest.raises(ConfigError, match="path is required"):
-        load_cairn_config(path, default_machine_name="h")
+    config = load_cairn_config(path, default_machine_name="h")
+    assert config.sync.mode == "folder"
+    assert config.sync.path is None
 
 
 def test_out_of_range_port_raises(tmp_path):
