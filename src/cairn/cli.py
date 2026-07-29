@@ -10,10 +10,12 @@ that keeps this file from turning into a god-function as the tool grows.
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from cairn import __version__
+from cairn.errors import CairnError
 
 
 @runtime_checkable
@@ -37,9 +39,11 @@ class Command(Protocol):
         ...
 
 
-# Populated as commands land (Phase 1+). Empty today: the scaffold ships the dispatch
-# machinery and `--version`; real subcommands (`use`, `status`, ...) plug in here.
-COMMANDS: list[Command] = []
+def _registered_commands() -> list[Command]:
+    """The production command set. Imported lazily to keep ``build_parser`` importable cheaply."""
+    from cairn.commands import all_commands
+
+    return all_commands()
 
 
 def build_parser(commands: Sequence[Command]) -> argparse.ArgumentParser:
@@ -70,10 +74,11 @@ def main(argv: Sequence[str] | None = None, commands: Sequence[Command] | None =
     """Parse ``argv`` and dispatch to the selected command.
 
     Returns the command's exit code, or 0 after printing help when no command is given.
-    ``commands`` is injectable so tests can dispatch over fakes; production passes the
-    registered :data:`COMMANDS`.
+    ``commands`` is injectable so tests can dispatch over fakes; production uses the registered
+    set. Any :class:`~cairn.errors.CairnError` a command raises is caught here and turned into a
+    clean ``stderr`` message + exit code 1 — commands never print-and-exit themselves.
     """
-    resolved = list(COMMANDS if commands is None else commands)
+    resolved = list(_registered_commands() if commands is None else commands)
     parser = build_parser(resolved)
     args = parser.parse_args(argv)
 
@@ -82,4 +87,8 @@ def main(argv: Sequence[str] | None = None, commands: Sequence[Command] | None =
         # No subcommand supplied — show help rather than failing silently.
         parser.print_help()
         return 0
-    return handler(args)
+    try:
+        return handler(args)
+    except CairnError as exc:
+        print(f"cairn: error: {exc}", file=sys.stderr)
+        return 1

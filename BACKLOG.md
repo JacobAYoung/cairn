@@ -61,12 +61,19 @@ These are not a phase; they are the definition of done for all work.
       (`pull/push/status`), machine identity. (Tests: path resolution, identity default = hostname.)
 
 ## Phase 1 — MVP (Vault + Profiles + Sync)  ← the whole toggleable-bundle vision
-- [ ] **#1.1** `cairn import` — pull existing `~/.claude` skills + memories into the vault. Idempotent.
-- [ ] **#1.2** `cairn use` / `cairn clear` — activation mechanics per SPEC Appendix A: manifest-tracked
-      symlinks (skills → `.claude/skills/`, memories → `.claude/rules/`), model merge into
-      `settings.local.json`, `<project>/.cairn/` state, gitignore, brief surfacing, full rollback.
-- [ ] **#1.3** `cairn status` / `cairn ls` — active profile(s) + vault inventory; detect broken links.
-- [ ] **#1.4** Sync backends: `folder` + `syncthing` (+ `git`, `off`). Best-effort, non-blocking, never mid-write.
+- [x] **#1.1** `cairn import` — copies skills (dirs) + memories (`*.md`) from `~/.claude` (or given
+      dirs) into the vault; non-destructive, skips existing. `importer.py`, 3 tests.
+- [x] **#1.2** `cairn use` / `cairn clear` — activation per SPEC Appendix A: pure `resolve_bundle`
+      (merge, dedup, last-model-wins) + `activate`/`deactivate`. Manifest-tracked symlinks (skills →
+      `.claude/skills/`, memories → `.claude/rules/`), model merge into `settings.local.json` with
+      backup, `<project>/.cairn/` state, `.gitignore`, full rollback that removes only Cairn's links
+      and restores the prior model. Validates before touching disk; refuses to clobber. `activation.py`,
+      15 tests. (Deferred to #2.2: brief surfacing.)
+- [x] **#1.3** `cairn status` / `cairn ls` — active profile(s) + machine/vault/sync summary; vault
+      inventory. `commands.py`, covered by CLI integration tests. (Broken-link detection: deferred to
+      `cairn doctor`, icebox #5.8.)
+- [x] **#1.4** Sync backends: `off`/`folder`/`syncthing` (no-op — external tool owns sync) + `git`
+      (injected runner, best-effort, swallows network failure). `sync.py`, 8 tests.
 
 ## Phase 2 — v1 (the cost-saving story)
 - [ ] **#2.1** `cairn ask` — local-model delegation (Ollama endpoint, task→model map, reachability guard,
