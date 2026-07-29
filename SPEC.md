@@ -41,13 +41,25 @@ Rename freely.*
   skills/                     # canonical home for every skill you own
   memories/                   # canonical home for every memory
   session-notes/              # warm-start checkpoints, one file per project
-  mailbox/                    # Tier-0 cross-machine messages (per-machine files)
+  mailbox/                    # Tier-0 cross-machine messages (one folder per machine)
   profiles.toml               # named bundles  (human-edited)
-  cairn.toml                  # global config: routing, sync, bridge  (human-edited)
+  cairn.toml                  # global config: machine, routing, sync, bridge  (human-edited)
 ```
 
-A project that has a profile active gets a `.cairn` marker file recording which profile is on,
-so `cairn status` works and it survives across sessions.
+**Two different `.cairn` locations — don't confuse them:**
+- `~/.cairn/` (home) = **the vault** shown above; the synced source of truth for all machines.
+- `<project>/.cairn/` = **per-project state**, created by `cairn use`, *not* synced (it's local to
+  the machine + checkout). It's a small directory, not a single file:
+
+```
+<project>/.cairn/
+  state.json          # which profile(s) active + timestamp  (drives `cairn status`)
+  manifest.json       # exactly which symlinks Cairn created + the prior model value (drives `clear`)
+  backup/             # pre-change copy of only the files Cairn modifies (settings.local.json)
+```
+
+Because `<project>/.cairn/` is machine-local state, `cairn use` adds it to the project's
+`.gitignore` (if one exists) so it never gets committed.
 
 ---
 
@@ -75,6 +87,9 @@ Profiles compose: `cairn use dev-heavy,research` merges both.
 
 ### `cairn.toml`
 ```toml
+[machine]
+name = "desktop"           # this machine's mailbox address; defaults to hostname if omitted
+
 [sync]
 mode = "syncthing"         # "syncthing" | "folder" | "git" | "off"
 # folder mode just points at an already-synced dir (iCloud/Dropbox):
@@ -135,8 +150,13 @@ model on the Mac Mini instead of spending API tokens. Two implementations, pick 
   and prints the answer. Claude invokes it via Bash. Zero new protocol, works today.
 - **Fancier:** expose it as an MCP server so it shows up as a native tool. More polish, more setup.
 
+Two switches gate delegation, and **both** must be on: `[delegate].enabled` in `cairn.toml` is the
+global kill-switch (off → `cairn ask` refuses everywhere), and `delegate = true` on a profile opts
+that project in. This lets you keep delegation available globally but only *use* it in profiles where
+local offload makes sense.
+
 Honest scope: this saves **real dollars** because it moves cheap work off the metered model onto
-hardware you already run — that's the (b) lever ("stop using an expensive model for trivial work").
+hardware you already run — the "stop paying an expensive model for trivial work" lever.
 A pure "auto-classify every prompt to a cheaper Claude tier" router is deliberately **not** the
 default, because the classifier call eats most of the savings. Explicit rules + local offload win.
 
@@ -213,14 +233,17 @@ The whole "toggle" promise lives or dies here. Details:
 1. **Read** the profile from `profiles.toml` → resolve the list of skill + memory names.
 2. **Validate** every named skill/memory exists in the vault. Missing → hard error, change *nothing*
    (no half-applied state).
-3. **Snapshot** the project's current `.claude/` state into `.cairn/backup/` (see rollback below).
+3. **Snapshot** only the files Cairn is about to modify (currently just `.claude/settings.local.json`)
+   into `<project>/.cairn/backup/` — not the whole `.claude/` tree (see rollback below).
 4. **Link skills:** for each skill, create a symlink `.claude/skills/<name>` → `~/.cairn/skills/<name>`.
-   Cairn only ever touches links it owns — it writes a manifest (`.cairn/manifest.json`) listing
+   Cairn only ever touches links it owns — it writes `<project>/.cairn/manifest.json` listing
    exactly which paths it created, so `clear` removes *only* those and never a hand-placed file.
 5. **Link memories:** same, into wherever the project reads memory from.
 6. **Write model:** merge `model = "<profile model>"` into `.claude/settings.local.json` (merge, not
    overwrite — preserve any keys already there; record the prior value in the manifest).
-7. **Write the marker:** `.cairn` file records active profile(s) + timestamp.
+7. **Write state:** `<project>/.cairn/state.json` records active profile(s) + timestamp.
+8. **Surface the brief:** if a warm-start checkpoint exists for this project, print it (see Appendix B)
+   so the next session starts warm.
 
 ### Does this break a session that's already running?
 This is the real risk, so it's a designed constraint, not an afterthought:
@@ -235,8 +258,8 @@ This is the real risk, so it's a designed constraint, not an afterthought:
   hot-swap a running process.
 
 ### Rollback / safety
-- `.cairn/manifest.json` is the source of truth for "what did Cairn touch." `cairn clear` reverses
-  exactly that manifest: remove Cairn-created links, restore the recorded prior `model` value.
+- `<project>/.cairn/manifest.json` is the source of truth for "what did Cairn touch." `cairn clear`
+  reverses exactly that manifest: remove Cairn-created links, restore the recorded prior `model` value.
 - `cairn clear` on a project with hand-edited `.claude/skills/` leaves the hand-edited ones alone —
   it only removes links whose target is inside `~/.cairn/`.
 - If the vault folder is unavailable (sync not mounted), symlinks dangle harmlessly; `cairn status`
@@ -281,6 +304,79 @@ The warm-start distiller. Design decisions:
 - **Why this is the right token lever:** we spend cheap **input** to avoid expensive **output +
   tool-call round-trips** (re-reading files, re-deriving decisions). Accumulating raw history would
   bloat every turn and cost *more* — so checkpoints are distilled, capped, and newest-first.
+
+---
+
+## Appendix C — Sync layer & the Tier-0 mailbox
+
+Sync is the spine: profiles, checkpoints, and cross-machine messages all ride on the same synced
+`~/.cairn/` folder. Get this right and Pillars 1/4/5 come mostly for free.
+
+### The pluggable sync interface
+Cairn never reimplements file sync — it drives whatever the user already trusts. One tiny internal
+contract, three real backends (plus `off`):
+
+| `[sync].mode` | What Cairn does | Admin? | Notes |
+|---|---|---|---|
+| `folder` | Nothing but read/write `~/.cairn`; the folder *is* an already-synced dir (iCloud/Dropbox/OneDrive) | No | Simplest. `cairn sync` is a no-op that just reports status. |
+| `syncthing` | `cairn sync` checks the Syncthing folder is up-to-date via its local REST API; setup helper prints the folder ID to add on the other machine | No | Recommended. P2P, no cloud, no server. |
+| `git` | `cairn sync` wraps `git pull --rebase && git add -A && git commit && git push` so you never type git | No | For people who want history. Conflict path below. |
+| `off` | Single-machine; no cross-device features | No | Vault still works locally. |
+
+**Design rule:** the rest of Cairn only ever calls `sync.pull()` / `sync.push()` / `sync.status()`.
+Adding a backend later (rsync, S3, Resilio) is one small class, no changes elsewhere.
+
+### When sync happens (and when it must not)
+- `cairn checkpoint` and `cairn send` call `sync.push()` after writing, so the other machine sees it.
+- `cairn brief`, `cairn inbox`, and `cairn use` call `sync.pull()` first, so you read the latest.
+- **Never auto-sync mid-write.** All syncs bracket a completed file operation, never interleave one.
+- **Never block the CLI on a slow network.** `sync.push()` is best-effort with a short timeout; on
+  failure it warns (`"saved locally; not yet synced"`) and exits 0. The local write already succeeded —
+  sync is eventual, not required.
+
+### Conflict handling (honest about the tradeoffs)
+Different files have different conflict risk, so they're stored to minimize it:
+- **Skills/memories** — rarely edited from two machines at once; low risk. Git/Syncthing handle these fine.
+- **Checkpoints** — append-only, newest-first, **one file per project**. Two machines checkpointing the
+  *same* project concurrently is the only real collision. Mitigation: each checkpoint entry is a
+  self-contained dated+machine-stamped block (`## 2026-07-29 14:20 — desktop`), so a merge that keeps
+  *both* blocks is correct, not corrupt. For `folder`/`syncthing` a rare sync-conflict copy may appear;
+  `cairn status` surfaces it. For `git`, `cairn sync` uses `--rebase` and, on a notes conflict, keeps
+  both blocks (union) rather than prompting.
+- **`profiles.toml` / `cairn.toml`** — edited by hand, occasionally. These *can* hard-conflict. Cairn
+  does **not** try to auto-merge config; on a git conflict here it stops and tells you to resolve it,
+  because silently merging config is worse than a 30-second manual fix.
+
+### Tier-0 mailbox protocol
+Cross-machine messaging with **no daemon, no ports, no admin** — just files in the synced vault.
+
+```
+~/.cairn/mailbox/
+  desktop/            # messages addressed TO the machine named "desktop"
+    2026-07-29T142033Z--from-laptop.md
+  laptop/
+    2026-07-29T140012Z--from-desktop.md
+```
+
+- **Machine identity:** each machine has a `name` (from `cairn.toml`, default = hostname). `cairn send
+  <machine> "<msg>"` writes a timestamped file into `mailbox/<machine>/` and `sync.push()`es.
+- **Filename = ordering + provenance:** ISO-8601 UTC timestamp (sortable) + sender, so `inbox` just
+  lists the directory sorted — no index file to conflict on. Two machines writing to the same inbox
+  produce two *different* filenames; they never collide (this is why it's a directory of files, not one
+  appended file).
+- **`cairn inbox`** pulls, lists unread (newest first), prints them; `cairn inbox --read` marks them by
+  moving to `mailbox/<machine>/read/`. Non-destructive; nothing auto-deletes.
+- **Payload is plain markdown** — a note, a decision, a paste of context. To hand over *working
+  knowledge* between machines, the natural move is `cairn checkpoint` on machine A (it's already in the
+  synced vault) + a one-line `cairn send` pointing at it. So "have my other session gain this
+  knowledge" = a checkpoint the other machine reads with `cairn brief`. The mailbox is for the nudge;
+  the vault is the memory.
+
+### How this relates to the Tier-1 live bridge (v2)
+Tier-0 is async (you read your inbox when you start a session). Tier-1 adds a small local listener for
+*real-time* session-to-session chat — the only feature that binds a port and can trip a firewall
+prompt (still no admin on macOS for a high port). It's opt-in (`[bridge].enabled`), built last, and
+strictly additive: Tier-0 keeps working whether or not the bridge is on.
 
 ---
 
