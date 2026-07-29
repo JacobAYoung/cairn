@@ -77,6 +77,43 @@ def test_resolve_empty_raises():
         resolve_bundle(_profiles(), [])
 
 
+def test_resolve_expands_inheritance_parent_first_child_overrides():
+    profiles = {
+        "base": Profile("base", ("develop",), ("code-conventions",), "sonnet"),
+        "dev": Profile("dev", ("audit",), (), "opus", extends=("base",)),
+    }
+
+    bundle = resolve_bundle(profiles, ["dev"])
+
+    # parent's skill first, then child's; parent's memory inherited; child's model overrides
+    assert bundle.skills == ("develop", "audit")
+    assert bundle.memories == ("code-conventions",)
+    assert bundle.model == "opus"
+
+
+def test_resolve_inherited_model_kept_when_child_has_none():
+    profiles = {
+        "base": Profile("base", (), (), "sonnet"),
+        "dev": Profile("dev", ("audit",), (), None, extends=("base",)),
+    }
+    assert resolve_bundle(profiles, ["dev"]).model == "sonnet"
+
+
+def test_resolve_detects_inheritance_cycle():
+    profiles = {
+        "a": Profile("a", (), (), None, extends=("b",)),
+        "b": Profile("b", (), (), None, extends=("a",)),
+    }
+    with pytest.raises(CairnError, match="inheritance cycle"):
+        resolve_bundle(profiles, ["a"])
+
+
+def test_resolve_unknown_parent_raises():
+    profiles = {"dev": Profile("dev", (), (), None, extends=("ghost",))}
+    with pytest.raises(CairnError, match="unknown profile.*ghost"):
+        resolve_bundle(profiles, ["dev"])
+
+
 # --- activate (filesystem) ----------------------------------------------------------------
 
 

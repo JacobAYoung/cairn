@@ -30,13 +30,18 @@ DEFAULT_BRIDGE_PORT = 8787
 
 @dataclass(frozen=True)
 class Profile:
-    """A named bundle activated per project: skills + memories + an optional model."""
+    """A named bundle activated per project: skills + memories + an optional model.
+
+    ``extends`` names other profiles this one inherits from (parents first, child overrides) so
+    common bundles aren't copy-pasted. Inheritance is expanded in ``activation.resolve_bundle``.
+    """
 
     name: str
     skills: tuple[str, ...] = ()
     memories: tuple[str, ...] = ()
     model: str | None = None
     delegate: bool = False
+    extends: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -167,6 +172,9 @@ def load_profiles(path: Path) -> dict[str, Profile]:
         model = body.get("model")
         if model is not None and not isinstance(model, str):
             raise ConfigError(f"profile {name!r}: model must be a string")
+        raw_extends = body.get("extends", [])
+        if isinstance(raw_extends, str):
+            raw_extends = [raw_extends]
         profiles[name] = Profile(
             name=name,
             skills=_require_str_list(body.get("skills", []), where=f"profile {name!r}: skills"),
@@ -175,5 +183,6 @@ def load_profiles(path: Path) -> dict[str, Profile]:
             ),
             model=model,
             delegate=bool(body.get("delegate", False)),
+            extends=_require_str_list(raw_extends, where=f"profile {name!r}: extends"),
         )
     return profiles

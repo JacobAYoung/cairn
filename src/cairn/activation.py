@@ -54,29 +54,56 @@ def _dedupe(items: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(seen)
 
 
-def resolve_bundle(profiles: dict[str, Profile], names: list[str]) -> Bundle:
-    """Merge the named profiles into one :class:`Bundle` (pure).
+def _effective(
+    profiles: dict[str, Profile], name: str, stack: tuple[str, ...]
+) -> tuple[tuple[str, ...], tuple[str, ...], str | None]:
+    """Resolve a profile's effective (skills, memories, model), expanding ``extends``.
 
-    Skills/memories are unioned in first-seen order; ``model`` is the last specified one (so a
-    later profile in ``a,b`` overrides an earlier model). An unknown name raises before any caller
-    touches the filesystem.
+    Parents are applied first (in listed order), then the profile itself, so a child overrides an
+    inherited model and appends its own skills/memories. Raises on an unknown parent or a cycle.
+    """
+    if name not in profiles:
+        available = ", ".join(sorted(profiles)) or "(none)"
+        raise CairnError(f"unknown profile(s): {name}. Available: {available}")
+    if name in stack:
+        raise CairnError(f"profile inheritance cycle: {' -> '.join((*stack, name))}")
+
+    profile = profiles[name]
+    skills: tuple[str, ...] = ()
+    memories: tuple[str, ...] = ()
+    model: str | None = None
+    for parent in profile.extends:
+        p_skills, p_memories, p_model = _effective(profiles, parent, (*stack, name))
+        skills += p_skills
+        memories += p_memories
+        if p_model is not None:
+            model = p_model
+    skills += profile.skills
+    memories += profile.memories
+    if profile.model is not None:
+        model = profile.model
+    return skills, memories, model
+
+
+def resolve_bundle(profiles: dict[str, Profile], names: list[str]) -> Bundle:
+    """Merge the named profiles (with inheritance expanded) into one :class:`Bundle` (pure).
+
+    Each name's ``extends`` chain is expanded first; then names are unioned in first-seen order and
+    ``model`` is the last specified one (so a later profile in ``a,b`` overrides an earlier model).
+    Unknown names raise before any caller touches the filesystem.
     """
     if not names:
         raise CairnError("no profile given")
-    unknown = [n for n in names if n not in profiles]
-    if unknown:
-        available = ", ".join(sorted(profiles)) or "(none)"
-        raise CairnError(f"unknown profile(s): {', '.join(unknown)}. Available: {available}")
 
     skills: tuple[str, ...] = ()
     memories: tuple[str, ...] = ()
     model: str | None = None
     for name in names:
-        profile = profiles[name]
-        skills += profile.skills
-        memories += profile.memories
-        if profile.model is not None:
-            model = profile.model
+        n_skills, n_memories, n_model = _effective(profiles, name, ())
+        skills += n_skills
+        memories += n_memories
+        if n_model is not None:
+            model = n_model
     return Bundle(tuple(names), _dedupe(skills), _dedupe(memories), model)
 
 
