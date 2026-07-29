@@ -34,7 +34,7 @@ from cairn.mailbox import send as send_message
 from cairn.scaffold import write_starter_config
 from cairn.session_start import build_session_start_output
 from cairn.sync import make_sync_backend
-from cairn.system import default_machine_name, default_vault_root
+from cairn.system import default_machine_name, default_vault_root, set_vault_location
 from cairn.vault import Vault
 
 
@@ -316,6 +316,12 @@ class InitCommand(_Base):
             "--sync", default="off", help="sync mode for the starter config (default: off)"
         )
         parser.add_argument(
+            "--vault-path",
+            type=Path,
+            default=None,
+            help="put the vault here (e.g. a network drive or git checkout) and remember it",
+        )
+        parser.add_argument(
             "--skills",
             type=Path,
             default=None,
@@ -324,7 +330,8 @@ class InitCommand(_Base):
         parser.add_argument("--memories", type=Path, default=None, help="memories dir to import")
 
     def run(self, args: argparse.Namespace) -> int:
-        vault = self.vault()
+        # --vault-path relocates the vault (and remembers it) before anything is scaffolded.
+        vault = Vault(set_vault_location(args.vault_path)) if args.vault_path else self.vault()
         claude_dir = args.claude_dir
         skills_src = args.skills if args.skills is not None else claude_dir / "skills"
 

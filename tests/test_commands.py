@@ -241,3 +241,27 @@ def test_session_start_emits_empty_json_when_nothing_active(env, capsys):
     # No profile active, no default configured in the fixture, no checkpoint
     main(["session-start"], commands=[env["make"](SessionStartCommand)])
     assert json.loads(capsys.readouterr().out) == {}
+
+
+def test_init_vault_path_relocates_vault_and_remembers_it(env, capsys, tmp_path, monkeypatch):
+    # Arrange: fake home so the pointer file doesn't touch the real ~/.config
+    from pathlib import Path
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    net_vault = tmp_path / "netdrive" / "cairn"
+    claude_dir = tmp_path / "claude"
+
+    init = InitCommand(vault_root=lambda: tmp_path / "unused", cwd=lambda: env["project"])
+
+    # Act: point the vault at the "network drive"
+    code = main(
+        ["init", "--vault-path", str(net_vault), "--claude-dir", str(claude_dir)],
+        commands=[init],
+    )
+
+    # Assert: vault scaffolded at the network path, and the location is remembered
+    assert code == 0
+    assert (net_vault / "cairn.toml").exists()
+    pointer = tmp_path / "home" / ".config" / "cairn" / "location"
+    assert pointer.read_text().strip() == str(net_vault)
