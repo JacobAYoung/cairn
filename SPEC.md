@@ -11,6 +11,35 @@ Rename freely.*
 
 ---
 
+## Positioning & non-goals
+
+**The wedge (what only Cairn does):** *named, toggleable capability bundles for Claude Code that
+follow you across machines.* Everything is built on blessed, native primitives (`.claude/rules/`
+symlinks, `@~/` imports, `autoMemoryDirectory`, the `SessionStart` hook) and on **files as the source
+of truth** — so it rides the platform instead of fighting it, and there's no opaque database or hosted
+service. See RESEARCH.md for the competitive basis and the open Claude Code feature requests
+(#36561/#39195) this answers.
+
+**The two moat pillars** (bet differentiation here — the platform won't casually absorb them and
+competitors don't combine them):
+1. **Profile bundles + instant per-project toggle** — the gap native Claude Code has today.
+2. **Cross-machine via plain files** — native auto-memory is explicitly machine-local; Cairn syncs the
+   whole setup (skills, memories, profiles, and Claude's own auto-memory) with no hosted service.
+
+**Non-goals (deliberately not competing here):**
+- **Not a proxy / router.** Unlike claude-code-router, Cairn never replaces the launch/login path; it's
+  *additive*. Delegation (`cairn ask`) offloads specific bulk subtasks to a local model — Claude stays
+  the driver. No auto-classifying router (it eats its own savings).
+- **Not a note-editing UI.** Obsidian owns that lane. Cairn organizes what an *agent* loads, not what a
+  human reads.
+- **Not a generic dotfile manager.** `chezmoi`/`stow` exist; Cairn is Claude-Code-aware, not a
+  general-purpose symlink farm.
+
+Every proposed feature must pass one test: *does it strengthen the bundle-toggle or the cross-machine
+story?* If not, it's out of scope.
+
+---
+
 ## Design principles (your stated goals, made into rules)
 
 1. **No admin, ever, for core features.** If a feature needs elevated privileges, it's optional and off by default.

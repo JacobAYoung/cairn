@@ -59,8 +59,72 @@ the vault, profiles, sync, mailbox, warm-start, and `cairn ask` (which talks to 
 future `AgentAdapter` seam (BACKLOG #5.11) lets other agents become activation targets. Focus is
 Claude for now.
 
+## Commands
+
+| Command | What it does |
+|---|---|
+| `cairn init` | One-time setup: scaffold vault, import `~/.claude` skills/memories, install skill + hook |
+| `cairn ls [skills\|memories\|profiles]` | List what's in the vault |
+| `cairn use <profile[,profile]>` | Activate bundle(s) in the current project (persists) |
+| `cairn clear` | Deactivate — remove only Cairn's links, restore the prior model |
+| `cairn status` | Active profile(s) + machine / vault / sync summary |
+| `cairn ask <task> "<prompt>"` | Delegate a bulk subtask to a local model (free tokens) |
+| `cairn checkpoint [-m ...]` | Save a warm-start note (from `-m` or stdin) |
+| `cairn brief` | Print the latest warm-start note |
+| `cairn sync-memory [--off]` | Point Claude's auto-memory at the synced vault |
+| `cairn send <machine> "<msg>"` · `cairn inbox [--read]` | Cross-machine messages (Tier-0) |
+| `cairn session-start` | Internal SessionStart hook target (auto-activates default + injects brief) |
+
+## Configuration
+
+`~/.cairn/cairn.toml`:
+
+```toml
+[machine]
+name = "desktop"            # this machine's mailbox address (default: hostname)
+
+[sync]
+mode = "syncthing"          # off | folder | syncthing | git
+
+[defaults]
+profile = "default"         # auto-activated on session start when nothing else is active
+
+[delegate]
+enabled  = true
+endpoint = "http://localhost:11434"
+default  = "qwen2.5:14b"
+tasks    = { summarize = "qwen2.5:14b", classify = "nemotron-mini" }
+```
+
+`~/.cairn/profiles.toml`:
+
+```toml
+[profiles.dev-heavy]
+skills   = ["develop", "audit-and-review"]
+memories = ["code-conventions"]
+model    = "opus"
+delegate = true
+```
+
+## Recipes
+
+**Vault on a network / shared drive (no git dance):**
+```bash
+cairn init --vault-path /Volumes/team-share/cairn --sync folder
+```
+The location is remembered (`~/.config/cairn/location`); the drive's own sync carries it between machines.
+
+**Vault as a git repo:**
+```bash
+cairn init --vault-path ~/cairn-vault --sync git   # then `git init` + add a remote in that dir
+```
+`cairn` wraps pull/commit/push; run any command and sync is best-effort in the background.
+
+**Second machine:** `pipx install cairn && cairn init --vault-path <same synced path>`.
+
 ## Design principles
 
-No admin ever for core features · minimal dependencies · one human-editable TOML config ·
-CLI-first · drivable by Claude itself · reversible and non-destructive. See
-[CLAUDE.md](CLAUDE.md) for the full engineering standard every change must meet.
+No admin ever for core features · minimal dependencies (only `httpx`) · one human-editable TOML
+config · CLI-first · drivable by Claude itself · reversible and non-destructive · **files are the
+source of truth** (no opaque database). See [CLAUDE.md](CLAUDE.md) for the full engineering standard
+every change must meet, and [SPEC.md](SPEC.md) for design + positioning.

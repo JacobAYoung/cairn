@@ -106,10 +106,14 @@ These are not a phase; they are the definition of done for all work.
       `claude_setup.py`, `session_start.py`; 14 tests. Verified end-to-end against temp dirs.
 - [x] **#4.1** Bundled Cairn skill (`src/cairn/data/skill/SKILL.md`) — teaches Claude when to reach for
       `ask`/`checkpoint`/`use`/`send`. Installed by `cairn init`.
-- [ ] **#4.2** Full docs pass: README, command reference, quickstart, config reference.
-- [ ] **#4.3** Packaging: pipx install path proven; single-binary path scoped for later.
-- [ ] **#4.4** Positioning section in SPEC (wedge = profiles + cross-machine; non-goals = don't compete as
-      a generic vault/router) — from the viability discussion.
+- [x] **#4.2** Docs pass: README now has setup/quickstart, command reference, config reference, and
+      recipes (network-drive vault, git vault, second machine). SPEC has the positioning section.
+- [x] **#4.3** Packaging proven: `python -m build` produces a wheel that **includes the bundled skill
+      data** (`cairn/data/skill/SKILL.md`); fresh-venv install runs `cairn --version` and `cairn init`
+      correctly (skill installed from the packaged data). pipx uses the same mechanism. Single-binary
+      path still scoped for later.
+- [x] **#4.4** Positioning & non-goals section added to SPEC (wedge = profile bundles + cross-machine;
+      non-goals = not a proxy/router, not a note UI, not a generic dotfile manager).
 
 ## Phase 5 — Icebox (speculative — captured, not committed)
 
@@ -143,11 +147,9 @@ scheduled; promote into a phase when it proves worth the weight.
       Focus stays Claude for now; this is the future-proofing note.
 
 *Vault backends — shared drive / git repo (single-user, multi-machine-optional):*
-- [ ] **#5.12** Vault on a shared network drive or git repo. **Already possible today**: point
-      `CAIRN_HOME` at a mounted network drive (with `[sync].mode = "folder"`) or use
-      `[sync].mode = "git"` for a git-repo vault. Enhancement: a `[vault].path` config key so the vault
-      location is set in config (not just the env var), plus documented recipes for "network drive as
-      vault" and "git repo as vault." Serves the single-machine-but-shared-storage case.
+- [x] **#5.12** Vault on a shared network drive or git repo. `cairn init --vault-path <dir>` puts the
+      vault on a mounted share (with `--sync folder`) or a git checkout (`--sync git`) and remembers the
+      location in `~/.config/cairn/location` (no env var needed). Recipes documented in the README.
 
 *Growth (later, flag caution):*
 - [ ] **#5.9** Shareable profiles — `cairn install <url>` a bundle a friend can use (the personal→friends path).
