@@ -36,6 +36,20 @@ ruff check .    # lint
 cairn --version # smoke-test the entry point
 ```
 
+## How it integrates with Claude (and, later, other agents)
+
+Cairn needs **no plugin, API, or MCP server**. It integrates at two levels, both native:
+
+1. **Setup-time:** `cairn use` writes into the files Claude Code already reads at session start —
+   `.claude/skills/`, `.claude/rules/`, `.claude/settings.local.json`. Activation *is* the integration.
+2. **Runtime:** it's a plain CLI on your `PATH`, so Claude can call `cairn use`/`ask`/`checkpoint`
+   directly. A bundled Cairn skill (planned) teaches Claude *when* to reach for those commands.
+
+**Model-agnostic by design:** everything except the activation *target* is already agent-neutral —
+the vault, profiles, sync, mailbox, warm-start, and `cairn ask` (which talks to any local model). A
+future `AgentAdapter` seam (BACKLOG #5.11) lets other agents become activation targets. Focus is
+Claude for now.
+
 ## Design principles
 
 No admin ever for core features · minimal dependencies · one human-editable TOML config ·

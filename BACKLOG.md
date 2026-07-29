@@ -118,6 +118,13 @@ scheduled; promote into a phase when it proves worth the weight.
 - [ ] **#5.7** `cairn use --dry-run` — preview exactly what would link/change before touching anything.
 - [ ] **#5.8** `cairn doctor` — vault integrity, broken links, sync state, Ollama reachability.
 
+*Model/agent-agnostic (keep in mind; don't build yet):*
+- [ ] **#5.11** `AgentAdapter` seam — activation currently targets Claude Code paths (`.claude/skills`,
+      `.claude/rules`, `settings.local.json`). Factor the *target* behind an adapter so other agents
+      (Cursor, Codex, Gemini CLI, …) can be activation targets. Everything else is already
+      agent-neutral: vault, profiles, sync, mailbox, warm-start, and `cairn ask` (any local model).
+      Focus stays Claude for now; this is the future-proofing note.
+
 *Growth (later, flag caution):*
 - [ ] **#5.9** Shareable profiles — `cairn install <url>` a bundle a friend can use (the personal→friends path).
 - [ ] **#5.10** Shared/team read-only vault overlay — real, but drifts toward platform territory; park it.

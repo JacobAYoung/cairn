@@ -4,4 +4,4 @@ See SPEC.md for the design and BACKLOG.md for the roadmap. The public entry poin
 :func:`cairn.cli.main`.
 """
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
