@@ -238,7 +238,9 @@ The whole "toggle" promise lives or dies here. Details:
 4. **Link skills:** for each skill, create a symlink `.claude/skills/<name>` → `~/.cairn/skills/<name>`.
    Cairn only ever touches links it owns — it writes `<project>/.cairn/manifest.json` listing
    exactly which paths it created, so `clear` removes *only* those and never a hand-placed file.
-5. **Link memories:** same, into wherever the project reads memory from.
+5. **Link memories:** symlink each vault memory into `<project>/.claude/rules/<name>.md` — this is the
+   platform's *documented* cross-project sharing pattern (see Appendix D), so no CLAUDE.md editing and
+   no external-import dialog. (Alt path: `@~/.cairn/memories/<name>.md` imports in `CLAUDE.local.md`.)
 6. **Write model:** merge `model = "<profile model>"` into `.claude/settings.local.json` (merge, not
    overwrite — preserve any keys already there; record the prior value in the manifest).
 7. **Write state:** `<project>/.cairn/state.json` records active profile(s) + timestamp.
@@ -389,10 +391,32 @@ strictly additive: Tier-0 keeps working whether or not the bridge is on.
 
 ---
 
-## Open decisions (yours to make — I picked defaults above)
+## Decisions (resolved 2026-07-29)
 
-1. **Config format:** TOML (my pick) vs YAML vs JSON.
-2. **Sync mechanism default:** Syncthing (my pick) vs a cloud folder vs git-wrapped.
-3. **Name:** Cairn (my pick) / Loom / Ferry / something you like better.
-4. **Language/packaging:** Python+pipx now (my pick) vs go-straight-for-a-binary.
+1. **Config format:** ✅ **TOML** — comments, low noise, zero-dep parse on 3.11+.
+2. **Sync mechanism default:** ✅ **Syncthing** — p2p, no cloud, no server, no admin.
+3. **Name:** ✅ **Cairn**.
+4. **Language/packaging:** ✅ **Python + pipx** — designed so it could later ship as a single binary.
+
+---
+
+## Appendix D — Claude Code integration points (verified against docs, 2026-07-29)
+
+These are the real hooks Cairn attaches to. All confirmed against the Claude Code memory docs +
+local inspection — the memory half of activation is no longer a placeholder.
+
+| What | Where Claude Code reads it | Cairn's mechanism |
+|---|---|---|
+| **Skills** | `<project>/.claude/skills/` and `~/.claude/skills/` (load on demand) | Symlink vault skills into `<project>/.claude/skills/` |
+| **Memories / rules** | `<project>/.claude/rules/*.md` — loaded at launch; **symlinks are the documented sharing pattern**; path-scopable via `paths:` frontmatter | Symlink vault memories into `.claude/rules/` (primary) |
+| **Personal imports** | `CLAUDE.local.md` (gitignored) supports `@path`, incl. **`@~/…` home imports** (depth 4; one-time approval for external imports) | Alt mechanism for memories that shouldn't be symlinks |
+| **Auto-memory** | `~/.claude/projects/<repo>/memory/` — **machine-local, NOT synced**; relocatable via `autoMemoryDirectory` (abs or `~/`) | Point it at the synced vault → Claude's own learnings sync across machines |
+| **Model** | `.claude/settings.local.json` (`model` key) | Merge the profile's model in; back up prior value |
+
+**Two implications for strategy (see also the viability notes):**
+- The `.claude/rules/` symlink pattern and home `@imports` mean Cairn's core is *building on blessed
+  primitives*, not fighting the platform — low breakage risk.
+- `autoMemoryDirectory` is the single strongest differentiator: native auto-memory is explicitly
+  machine-local, so **making it sync is a gap the platform doesn't fill** and MCP note-servers don't
+  cleanly cover.
 ```
