@@ -50,8 +50,11 @@ These are not a phase; they are the definition of done for all work.
 ---
 
 ## Phase 0 — Scaffolding
-- [ ] **#0.1** Repo scaffold: `pyproject.toml` (pipx-installable), package layout, test harness (pytest),
-      lint/format config, CI stub. README skeleton.
+- [x] **#0.1** Repo scaffold: `pyproject.toml` (hatchling, pipx-installable, `cairn` entry point),
+      `src/` layout, pytest + ruff config, GitHub Actions CI (3.11–3.13), README dev section.
+      CLI dispatch seam (`Command` protocol + injectable registry) so subcommands plug in without
+      editing `main`. 4 AAA tests (version output, help, dispatch payload+count, unknown-command).
+      Green: ruff clean, pytest 4/4.
 - [ ] **#0.2** Config layer: load/validate `cairn.toml` + `profiles.toml` (TOML), typed models, clear
       errors on malformed config. (Tests: valid/invalid/missing, exact parsed values.)
 - [ ] **#0.3** Vault model + paths: locate `~/.cairn/`, the pluggable sync interface seam
@@ -83,3 +86,35 @@ These are not a phase; they are the definition of done for all work.
 - [ ] **#4.3** Packaging: pipx install path proven; single-binary path scoped for later.
 - [ ] **#4.4** Positioning section in SPEC (wedge = profiles + cross-machine; non-goals = don't compete as
       a generic vault/router) — from the viability discussion.
+
+## Phase 5 — Icebox (speculative — captured, not committed)
+
+Ideas from the "what else could this be" brainstorm. Each must earn its place by strengthening the
+two moat pillars (**bundle-toggle** or **cross-machine**) or the honest token-savings story. Not
+scheduled; promote into a phase when it proves worth the weight.
+
+*Extends the bundle wedge:*
+- [ ] **#5.1** Bundle **MCP servers + hooks** into profiles (toggle every Claude Code primitive, not
+      just skills/memories) — the most on-brand expansion.
+- [ ] **#5.2** Profile **inheritance** (a `base` profile others extend) — DRY config.
+- [ ] **#5.3** **Auto-activation** — pick a profile from project markers (pyproject → python, git remote
+      → work) so the toggle is invisible.
+
+*Extends cross-machine:*
+- [ ] **#5.4** `cairn handoff` / `cairn resume` — package active profile + latest checkpoint + a note on
+      one machine, reconstruct on another. The headline cross-machine flow.
+- [ ] **#5.5** `cairn recall "<query>"` — search accumulated warm-start notes (grep, or local-embedding
+      search on the Mac Mini). Ties warm-start + local models.
+
+*Proves the savings / trust & ops:*
+- [ ] **#5.6** Cost/savings analytics — spend per profile + how much delegation & warm-start actually saved.
+- [ ] **#5.7** `cairn use --dry-run` — preview exactly what would link/change before touching anything.
+- [ ] **#5.8** `cairn doctor` — vault integrity, broken links, sync state, Ollama reachability.
+
+*Growth (later, flag caution):*
+- [ ] **#5.9** Shareable profiles — `cairn install <url>` a bundle a friend can use (the personal→friends path).
+- [ ] **#5.10** Shared/team read-only vault overlay — real, but drifts toward platform territory; park it.
+
+**Explicitly resisting (scope discipline):** no full auto-router · no note-editing UI (Obsidian's lane) ·
+not a generic dotfile manager (`stow` exists). Every add passes: *does this make the bundle or the
+cross-machine story better?*
