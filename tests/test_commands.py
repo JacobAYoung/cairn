@@ -18,11 +18,13 @@ from cairn.commands import (
     CheckpointCommand,
     ClearCommand,
     DoctorCommand,
+    HandoffCommand,
     ImportCommand,
     InboxCommand,
     InitCommand,
     LsCommand,
     RecallCommand,
+    ResumeCommand,
     SendCommand,
     SessionStartCommand,
     StatusCommand,
@@ -199,6 +201,30 @@ def test_send_then_inbox_roundtrip(env, capsys):
     out = capsys.readouterr().out
     assert "ping from me" in out
     assert "from testbox" in out
+
+
+def test_handoff_then_resume_carries_profile_and_brief(env, capsys):
+    # Arrange: active profile + a checkpoint to carry
+    main(["use", "dev-heavy"], commands=[env["make"](UseCommand)])
+    main(["checkpoint", "-m", "mid-refactor"], commands=[env["make"](CheckpointCommand)])
+    capsys.readouterr()
+
+    # Act: hand off to this same machine (testbox), then resume
+    main(["handoff", "testbox", "-m", "continue here"], commands=[env["make"](HandoffCommand)])
+    capsys.readouterr()
+    main(["resume"], commands=[env["make"](ResumeCommand)])
+
+    # Assert: resume surfaces the project, active profile, note, and brief
+    out = capsys.readouterr().out
+    assert "### CAIRN HANDOFF" in out
+    assert "profiles: dev-heavy" in out
+    assert "note: continue here" in out
+    assert "mid-refactor" in out
+
+
+def test_resume_reports_nothing_when_no_handoff(env, capsys):
+    main(["resume"], commands=[env["make"](ResumeCommand)])
+    assert "No handoff waiting." in capsys.readouterr().out
 
 
 def test_init_scaffolds_vault_and_wires_claude(env, capsys, tmp_path):

@@ -129,8 +129,9 @@ scheduled; promote into a phase when it proves worth the weight.
       served already by `[defaults].profile` auto-activation via the SessionStart hook.)
 
 *Extends cross-machine:*
-- [ ] **#5.4** `cairn handoff` / `cairn resume` — package active profile + latest checkpoint + a note on
-      one machine, reconstruct on another. The headline cross-machine flow.
+- [x] **#5.4** `cairn handoff <machine>` / `cairn resume` — packages the project's active profile(s) +
+      latest brief + a note into a marked mailbox message; `resume` surfaces the newest handoff.
+      `handoff.py`, 5 + 2 tests.
 - [x] **#5.5** `cairn recall "<query>"` — full-text search across memories + warm-start notes via stdlib
       SQLite FTS5 (BM25, highlighted snippets); files stay truth, index built in-memory per query.
 

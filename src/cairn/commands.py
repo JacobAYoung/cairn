@@ -28,6 +28,7 @@ from cairn.config import CairnConfig, load_cairn_config, load_profiles
 from cairn.delegate import Delegator
 from cairn.doctor import FAIL, run_checks
 from cairn.errors import CairnError
+from cairn.handoff import build_handoff_payload, latest_handoff
 from cairn.importer import import_into_vault
 from cairn.index import search as index_search
 from cairn.mailbox import inbox as read_inbox
@@ -338,6 +339,44 @@ class SendCommand(_Base):
         return 0
 
 
+class HandoffCommand(_Base):
+    name = "handoff"
+    help = "Package this project's active profile + latest brief and send it to another machine."
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("machine", help="recipient machine name")
+        parser.add_argument("-m", "--message", default=None, help="optional note to include")
+
+    def run(self, args: argparse.Namespace) -> int:
+        vault, cfg = self.vault(), self.config()
+        state = read_state(self._cwd())
+        profiles = list(state["profiles"]) if state else []
+        brief = latest_brief(vault, self.project_key())
+        payload = build_handoff_payload(self.project_key(), profiles, args.message, brief)
+        send_message(
+            vault, args.machine, payload, from_machine=cfg.machine.name, stamp=self.stamp()
+        )
+        make_sync_backend(cfg.sync.mode, vault.root).push(f"cairn: handoff to {args.machine}")
+        names = ", ".join(profiles) or "none"
+        print(f"Handed off {self.project_key()} to {args.machine} (profiles: {names}).")
+        return 0
+
+
+class ResumeCommand(_Base):
+    name = "resume"
+    help = "Show the latest handoff sent to this machine."
+
+    def run(self, args: argparse.Namespace) -> int:
+        vault, cfg = self.vault(), self.config()
+        make_sync_backend(cfg.sync.mode, vault.root).pull()
+        handoff = latest_handoff(read_inbox(vault, cfg.machine.name))
+        if handoff is None:
+            print("No handoff waiting.")
+            return 0
+        print(f"— handoff from {handoff.sender}\n{handoff.body}")
+        return 0
+
+
 class InboxCommand(_Base):
     name = "inbox"
     help = "Read messages sent to this machine (Tier-0)."
@@ -453,5 +492,7 @@ def all_commands() -> list:
         SyncMemoryCommand(),
         SendCommand(),
         InboxCommand(),
+        HandoffCommand(),
+        ResumeCommand(),
         SessionStartCommand(),
     ]

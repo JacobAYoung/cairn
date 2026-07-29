@@ -75,6 +75,7 @@ Claude for now.
 | `cairn recall "<query>"` | Full-text search across memories + warm-start notes |
 | `cairn sync-memory [--off]` | Point Claude's auto-memory at the synced vault |
 | `cairn send <machine> "<msg>"` · `cairn inbox [--read]` | Cross-machine messages (Tier-0) |
+| `cairn handoff <machine>` · `cairn resume` | Carry active profile + latest brief to another machine |
 | `cairn session-start` | Internal SessionStart hook target (auto-activates default + injects brief) |
 
 ## Configuration
