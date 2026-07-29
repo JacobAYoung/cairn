@@ -12,13 +12,22 @@ test can drive a command against a temp vault/project without monkeypatching glo
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
 from cairn.activation import activate, deactivate, read_state, resolve_bundle
-from cairn.config import load_cairn_config, load_profiles
+from cairn.automemory import disable as auto_disable
+from cairn.automemory import enable as auto_enable
+from cairn.checkpoints import latest_brief, write_checkpoint
+from cairn.config import CairnConfig, load_cairn_config, load_profiles
+from cairn.delegate import Delegator
+from cairn.errors import CairnError
 from cairn.importer import import_into_vault
+from cairn.mailbox import inbox as read_inbox
+from cairn.mailbox import mark_read
+from cairn.mailbox import send as send_message
 from cairn.sync import make_sync_backend
 from cairn.system import default_machine_name, default_vault_root
 from cairn.vault import Vault
@@ -43,6 +52,19 @@ class _Base:
 
     def vault(self) -> Vault:
         return Vault(self._vault_root())
+
+    def config(self) -> CairnConfig:
+        return load_cairn_config(
+            self.vault().cairn_config_path, default_machine_name=default_machine_name()
+        )
+
+    def project_key(self) -> str:
+        """Stable-enough key for this project: the working directory's name."""
+        return self._cwd().name
+
+    def stamp(self) -> str:
+        """A filename-safe, sortable timestamp derived from ``now`` (e.g. 20260729T174522)."""
+        return self._now().replace("-", "").replace(":", "")
 
     def configure(self, parser: argparse.ArgumentParser) -> None:  # default: no args
         return None
@@ -163,6 +185,117 @@ class LsCommand(_Base):
         return 0
 
 
+class AskCommand(_Base):
+    name = "ask"
+    help = "Delegate a bulk/mechanical subtask to a local model (free tokens)."
+
+    def __init__(self, *, post=None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._post = post  # injectable HTTP POST for tests; None -> Delegator's real default
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("task", help="task type mapped via [delegate].tasks (e.g. summarize)")
+        parser.add_argument("prompt", help="the prompt text")
+
+    def run(self, args: argparse.Namespace) -> int:
+        extra = {"post": self._post} if self._post is not None else {}
+        result = Delegator(self.config().delegate, **extra).ask(args.task, args.prompt)
+        print(result.text)
+        return 0
+
+
+class CheckpointCommand(_Base):
+    name = "checkpoint"
+    help = "Save a warm-start note for this project (from --message or stdin)."
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "-m", "--message", default=None, help="the brief; if omitted, read from stdin"
+        )
+
+    def run(self, args: argparse.Namespace) -> int:
+        text = (args.message if args.message is not None else sys.stdin.read()).strip()
+        if not text:
+            raise CairnError("nothing to checkpoint (empty message)")
+        cfg = self.config()
+        path = write_checkpoint(
+            self.vault(), self.project_key(), text, machine=cfg.machine.name, now=self._now()
+        )
+        print(f"Checkpoint saved for {self.project_key()} -> {path}")
+        return 0
+
+
+class BriefCommand(_Base):
+    name = "brief"
+    help = "Print the latest warm-start note for this project."
+
+    def run(self, args: argparse.Namespace) -> int:
+        brief = latest_brief(self.vault(), self.project_key())
+        print(brief if brief else "(no checkpoint for this project yet)")
+        return 0
+
+
+class SyncMemoryCommand(_Base):
+    name = "sync-memory"
+    help = "Redirect Claude's auto-memory to the synced vault (or --off to undo)."
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "--off", action="store_true", help="stop syncing auto-memory for this project"
+        )
+
+    def run(self, args: argparse.Namespace) -> int:
+        if args.off:
+            removed = auto_disable(self._cwd())
+            print("Auto-memory sync disabled." if removed else "Auto-memory sync was not enabled.")
+            return 0
+        target = auto_enable(self.vault(), self._cwd(), self.project_key())
+        print(f"Auto-memory for {self.project_key()} -> {target}")
+        print("  (takes effect on the next Claude Code session)")
+        return 0
+
+
+class SendCommand(_Base):
+    name = "send"
+    help = "Send a message to another machine's mailbox (Tier-0, no ports)."
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("machine", help="recipient machine name")
+        parser.add_argument("message", help="the message text")
+
+    def run(self, args: argparse.Namespace) -> int:
+        vault, cfg = self.vault(), self.config()
+        path = send_message(
+            vault, args.machine, args.message, from_machine=cfg.machine.name, stamp=self.stamp()
+        )
+        make_sync_backend(cfg.sync.mode, vault.root).push(f"cairn: message to {args.machine}")
+        print(f"Sent to {args.machine}: {path.name}")
+        return 0
+
+
+class InboxCommand(_Base):
+    name = "inbox"
+    help = "Read messages sent to this machine (Tier-0)."
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "--read", action="store_true", help="mark messages read after showing them"
+        )
+
+    def run(self, args: argparse.Namespace) -> int:
+        vault, cfg = self.vault(), self.config()
+        make_sync_backend(cfg.sync.mode, vault.root).pull()
+        messages = read_inbox(vault, cfg.machine.name)
+        if not messages:
+            print("Inbox empty.")
+            return 0
+        for message in messages:
+            print(f"— from {message.sender} ({message.filename})\n{message.body}\n")
+        if args.read:
+            print(f"Marked {mark_read(vault, cfg.machine.name)} message(s) read.")
+        return 0
+
+
 def all_commands() -> list:
     """The registered command set, in help-display order."""
     return [
@@ -171,4 +304,10 @@ def all_commands() -> list:
         ClearCommand(),
         StatusCommand(),
         LsCommand(),
+        AskCommand(),
+        CheckpointCommand(),
+        BriefCommand(),
+        SyncMemoryCommand(),
+        SendCommand(),
+        InboxCommand(),
     ]

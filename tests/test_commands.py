@@ -7,14 +7,22 @@ and the on-disk effect, plus that a bad profile flows through the CairnError bou
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from cairn.cli import main
 from cairn.commands import (
+    AskCommand,
+    BriefCommand,
+    CheckpointCommand,
     ClearCommand,
     ImportCommand,
+    InboxCommand,
     LsCommand,
+    SendCommand,
     StatusCommand,
+    SyncMemoryCommand,
     UseCommand,
 )
 
@@ -35,11 +43,24 @@ def env(tmp_path):
         model    = "opus"
         """
     )
+    (vault_root / "cairn.toml").write_text(
+        """
+        [machine]
+        name = "testbox"
+
+        [delegate]
+        enabled = true
+        default = "qwen2.5:14b"
+        tasks = { summarize = "qwen-sum" }
+        """
+    )
     project = tmp_path / "proj"
     project.mkdir()
 
-    def make(cmd_cls):
-        return cmd_cls(vault_root=lambda: vault_root, cwd=lambda: project, now=lambda: "T0")
+    def make(cmd_cls, **extra):
+        return cmd_cls(
+            vault_root=lambda: vault_root, cwd=lambda: project, now=lambda: "T0", **extra
+        )
 
     return {"vault_root": vault_root, "project": project, "make": make}
 
@@ -114,3 +135,63 @@ def test_import_seeds_vault_from_source(env, capsys, tmp_path):
     assert code == 0
     assert "Imported 1 skill" in capsys.readouterr().out
     assert (env["vault_root"] / "skills" / "web-notes" / "SKILL.md").read_text() == "x"
+
+
+def test_ask_prints_local_model_output(env, capsys):
+    # Arrange: inject a fake POST so no live Ollama is needed
+    calls = []
+
+    def fake_post(url, payload):
+        calls.append((url, payload))
+        return {"response": "3-line summary"}
+
+    ask = env["make"](AskCommand, post=fake_post)
+
+    # Act
+    code = main(["ask", "summarize", "big blob"], commands=[ask])
+
+    # Assert: prints model output; routed to the task's mapped model
+    assert code == 0
+    assert capsys.readouterr().out.strip() == "3-line summary"
+    assert calls[0][1]["model"] == "qwen-sum"
+
+
+def test_checkpoint_then_brief_roundtrip(env, capsys):
+    # Act: save a checkpoint, then read it back
+    main(["checkpoint", "-m", "decided to use TOML"], commands=[env["make"](CheckpointCommand)])
+    capsys.readouterr()
+    main(["brief"], commands=[env["make"](BriefCommand)])
+
+    # Assert: brief shows the note, stamped for this machine
+    out = capsys.readouterr().out
+    assert "decided to use TOML" in out
+    assert "— testbox" in out
+    # And it landed in the vault under the project key
+    assert (env["vault_root"] / "session-notes" / "proj.md").exists()
+
+
+def test_sync_memory_enable_then_off(env, capsys):
+    # Enable
+    main(["sync-memory"], commands=[env["make"](SyncMemoryCommand)])
+    settings_path = env["project"] / ".claude" / "settings.local.json"
+    settings = json.loads(settings_path.read_text())
+    assert settings["autoMemoryDirectory"] == str(env["vault_root"] / "auto-memory" / "proj")
+
+    # Disable
+    capsys.readouterr()
+    main(["sync-memory", "--off"], commands=[env["make"](SyncMemoryCommand)])
+    assert "autoMemoryDirectory" not in json.loads(settings_path.read_text())
+
+
+def test_send_then_inbox_roundtrip(env, capsys):
+    # Send to this same machine (testbox) so inbox picks it up
+    main(["send", "testbox", "ping from me"], commands=[env["make"](SendCommand)])
+    capsys.readouterr()
+
+    # Act
+    main(["inbox"], commands=[env["make"](InboxCommand)])
+
+    # Assert
+    out = capsys.readouterr().out
+    assert "ping from me" in out
+    assert "from testbox" in out

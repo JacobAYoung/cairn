@@ -76,16 +76,26 @@ These are not a phase; they are the definition of done for all work.
       (injected runner, best-effort, swallows network failure). `sync.py`, 8 tests.
 
 ## Phase 2 — v1 (the cost-saving story)
-- [ ] **#2.1** `cairn ask` — local-model delegation (Ollama endpoint, task→model map, reachability guard,
-      fail-loud). Two switches (global + per-profile).
-- [ ] **#2.2** `cairn checkpoint` / `cairn brief` — warm-start: persist Claude-authored brief, optional
-      local distill, newest-first per-project store, load at session start.
-- [ ] **#2.3** Point `autoMemoryDirectory` at the synced vault (opt-in) so Claude's own auto-memory syncs
-      across machines — the strongest cross-machine differentiator (see SPEC Appendix D).
+- [x] **#2.1** `cairn ask` — local-model delegation. `delegate.py`: `Delegator` (task→model map,
+      trailing-slash-safe endpoint, injected POST) + `DelegateUnreachable` fail-loud ("run this task
+      inline instead", exit 1). Global `[delegate].enabled` gate. 6 tests. (Deferred: per-profile
+      delegate flag as an advisory layer surfaced to Claude via the skill.)
+- [x] **#2.2** `cairn checkpoint` / `cairn brief` — warm-start. `checkpoints.py`: newest-first,
+      machine-stamped blocks in `session-notes/<project>.md`; `latest_brief` returns the newest block.
+      Checkpoint reads `--message` or stdin (Claude authors it). 4 tests. (Deferred: optional local
+      distill pass for long briefs.)
+- [x] **#2.3** `cairn sync-memory [--off]` — points `autoMemoryDirectory` at `<vault>/auto-memory/<proj>`
+      so Claude's own auto-memory syncs across machines (SPEC Appendix D differentiator). `automemory.py`,
+      3 tests.
 
 ## Phase 3 — v2 (cross-machine messaging)
-- [ ] **#3.1** Tier-0 mailbox — `cairn send` / `cairn inbox` over the synced vault (no daemon/ports).
-- [ ] **#3.2** Tier-1 live LAN bridge — opt-in real-time session chat (`[bridge].enabled`), built last.
+- [x] **#3.1** Tier-0 mailbox — `cairn send` / `cairn inbox [--read]` over the synced vault (no daemon,
+      no ports). `mailbox.py`: timestamp+sender filenames (collision-free), newest-first, non-destructive
+      `read/` move; send/inbox call best-effort sync push/pull. 4 tests.
+- [!] **#3.2** Tier-1 live LAN bridge — **deferred by design.** It's the only port-binding feature and
+      SPEC marks it "build last, only if Tier-0 isn't enough." Tier-0 covers the stated need (carry
+      knowledge between machines) with zero ports/admin, so this stays parked until a concrete real-time
+      need appears.
 
 ## Phase 4 — Distribution & polish
 - [ ] **#4.1** Ship the bundled Cairn skill so Claude knows the commands exist and when to use them.
