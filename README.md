@@ -65,12 +65,14 @@ Claude for now.
 |---|---|
 | `cairn init` | One-time setup: scaffold vault, import `~/.claude` skills/memories, install skill + hook |
 | `cairn ls [skills\|memories\|profiles]` | List what's in the vault |
-| `cairn use <profile[,profile]>` | Activate bundle(s) in the current project (persists) |
+| `cairn use <profile[,profile]> [--dry-run]` | Activate bundle(s) in the current project (persists) |
 | `cairn clear` | Deactivate — remove only Cairn's links, restore the prior model |
 | `cairn status` | Active profile(s) + machine / vault / sync summary |
+| `cairn doctor` | Diagnose vault / config / links / sync / delegate health |
 | `cairn ask <task> "<prompt>"` | Delegate a bulk subtask to a local model (free tokens) |
 | `cairn checkpoint [-m ...]` | Save a warm-start note (from `-m` or stdin) |
 | `cairn brief` | Print the latest warm-start note |
+| `cairn recall "<query>"` | Full-text search across memories + warm-start notes |
 | `cairn sync-memory [--off]` | Point Claude's auto-memory at the synced vault |
 | `cairn send <machine> "<msg>"` · `cairn inbox [--read]` | Cross-machine messages (Tier-0) |
 | `cairn session-start` | Internal SessionStart hook target (auto-activates default + injects brief) |
@@ -99,9 +101,13 @@ tasks    = { summarize = "qwen2.5:14b", classify = "nemotron-mini" }
 `~/.cairn/profiles.toml`:
 
 ```toml
-[profiles.dev-heavy]
-skills   = ["develop", "audit-and-review"]
+[profiles.base]
+skills   = ["develop"]
 memories = ["code-conventions"]
+
+[profiles.dev-heavy]
+extends  = ["base"]              # inherit base's skills/memories; add/override below
+skills   = ["audit-and-review"]
 model    = "opus"
 delegate = true
 ```

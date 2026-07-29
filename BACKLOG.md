@@ -124,20 +124,20 @@ scheduled; promote into a phase when it proves worth the weight.
 *Extends the bundle wedge:*
 - [ ] **#5.1** Bundle **MCP servers + hooks** into profiles (toggle every Claude Code primitive, not
       just skills/memories) — the most on-brand expansion.
-- [ ] **#5.2** Profile **inheritance** (a `base` profile others extend) — DRY config.
-- [ ] **#5.3** **Auto-activation** — pick a profile from project markers (pyproject → python, git remote
-      → work) so the toggle is invisible.
+- [x] **#5.2** Profile **inheritance** — `extends` (parents first, child overrides), cycle-detected.
+- [ ] **#5.3** **Auto-activation** by project markers (pyproject → python, git remote → work). (Partly
+      served already by `[defaults].profile` auto-activation via the SessionStart hook.)
 
 *Extends cross-machine:*
 - [ ] **#5.4** `cairn handoff` / `cairn resume` — package active profile + latest checkpoint + a note on
       one machine, reconstruct on another. The headline cross-machine flow.
-- [ ] **#5.5** `cairn recall "<query>"` — search accumulated warm-start notes (grep, or local-embedding
-      search on the Mac Mini). Ties warm-start + local models.
+- [x] **#5.5** `cairn recall "<query>"` — full-text search across memories + warm-start notes via stdlib
+      SQLite FTS5 (BM25, highlighted snippets); files stay truth, index built in-memory per query.
 
 *Proves the savings / trust & ops:*
 - [ ] **#5.6** Cost/savings analytics — spend per profile + how much delegation & warm-start actually saved.
-- [ ] **#5.7** `cairn use --dry-run` — preview exactly what would link/change before touching anything.
-- [ ] **#5.8** `cairn doctor` — vault integrity, broken links, sync state, Ollama reachability.
+- [x] **#5.7** `cairn use --dry-run` — validates the bundle and prints the plan without touching anything.
+- [x] **#5.8** `cairn doctor` — vault/config/profiles/default-profile/dangling-links/sync/delegate checks.
 
 *Model/agent-agnostic (keep in mind; don't build yet):*
 - [ ] **#5.11** `AgentAdapter` seam — activation currently targets Claude Code paths (`.claude/skills`,

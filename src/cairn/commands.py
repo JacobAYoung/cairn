@@ -26,8 +26,10 @@ from cairn.checkpoints import latest_brief, write_checkpoint
 from cairn.claude_setup import install_session_start_hook, install_skill
 from cairn.config import CairnConfig, load_cairn_config, load_profiles
 from cairn.delegate import Delegator
+from cairn.doctor import FAIL, run_checks
 from cairn.errors import CairnError
 from cairn.importer import import_into_vault
+from cairn.index import search as index_search
 from cairn.mailbox import inbox as read_inbox
 from cairn.mailbox import mark_read
 from cairn.mailbox import send as send_message
@@ -116,12 +118,31 @@ class UseCommand(_Base):
         parser.add_argument(
             "profiles", help="comma-separated profile name(s), e.g. dev-heavy,research"
         )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="show what would change (and validate the bundle) without touching anything",
+        )
 
     def run(self, args: argparse.Namespace) -> int:
         vault = self.vault()
         profiles = load_profiles(vault.profiles_path)
         names = [n.strip() for n in args.profiles.split(",") if n.strip()]
         bundle = resolve_bundle(profiles, names)
+
+        if args.dry_run:
+            # Validate everything exists (raises on a missing skill/memory) but change nothing.
+            for skill in bundle.skills:
+                vault.skill_path(skill)
+            for memory in bundle.memories:
+                vault.memory_path(memory)
+            print(f"[dry-run] would activate {', '.join(bundle.profiles)} in {self._cwd()}")
+            print(f"  skills:   {', '.join(bundle.skills) or '(none)'}")
+            print(f"  memories: {', '.join(bundle.memories) or '(none)'}")
+            print(f"  model:    {bundle.model or '(unchanged)'}")
+            print("  nothing was changed.")
+            return 0
+
         result = activate(self._cwd(), vault, bundle, now=self._now())
         print(f"Activated {', '.join(result.profiles)} in {self._cwd()}")
         print(f"  skills:   {', '.join(result.linked_skills) or '(none)'}")
@@ -237,6 +258,45 @@ class BriefCommand(_Base):
     def run(self, args: argparse.Namespace) -> int:
         brief = latest_brief(self.vault(), self.project_key())
         print(brief if brief else "(no checkpoint for this project yet)")
+        return 0
+
+
+class RecallCommand(_Base):
+    name = "recall"
+    help = "Full-text search across your memories and warm-start notes."
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("query", help="search text")
+        parser.add_argument("--limit", type=int, default=10, help="max results (default 10)")
+
+    def run(self, args: argparse.Namespace) -> int:
+        hits = index_search(self.vault(), args.query, limit=args.limit)
+        if not hits:
+            print("No matches.")
+            return 0
+        for hit in hits:
+            print(f"[{hit.kind}] {hit.name}: {hit.snippet}")
+        return 0
+
+
+class DoctorCommand(_Base):
+    name = "doctor"
+    help = "Diagnose vault / config / links / sync / delegate health."
+
+    def __init__(self, *, ping=None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._ping = ping  # injectable reachability probe for tests
+
+    def run(self, args: argparse.Namespace) -> int:
+        extra = {"ping": self._ping} if self._ping is not None else {}
+        checks = run_checks(self.vault(), self._cwd(), **extra)
+        symbol = {"ok": "✓", "warn": "!", "fail": "✗"}
+        for check in checks:
+            print(f"  {symbol.get(check.status, '?')} {check.name}: {check.detail}")
+        failures = [c for c in checks if c.status == FAIL]
+        if failures:
+            print(f"\n{len(failures)} problem(s) found.")
+            return 1
         return 0
 
 
@@ -385,9 +445,11 @@ def all_commands() -> list:
         ClearCommand(),
         StatusCommand(),
         LsCommand(),
+        DoctorCommand(),
         AskCommand(),
         CheckpointCommand(),
         BriefCommand(),
+        RecallCommand(),
         SyncMemoryCommand(),
         SendCommand(),
         InboxCommand(),

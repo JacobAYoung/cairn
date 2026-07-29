@@ -17,10 +17,12 @@ from cairn.commands import (
     BriefCommand,
     CheckpointCommand,
     ClearCommand,
+    DoctorCommand,
     ImportCommand,
     InboxCommand,
     InitCommand,
     LsCommand,
+    RecallCommand,
     SendCommand,
     SessionStartCommand,
     StatusCommand,
@@ -241,6 +243,46 @@ def test_session_start_emits_empty_json_when_nothing_active(env, capsys):
     # No profile active, no default configured in the fixture, no checkpoint
     main(["session-start"], commands=[env["make"](SessionStartCommand)])
     assert json.loads(capsys.readouterr().out) == {}
+
+
+def test_use_dry_run_reports_plan_without_changing_anything(env, capsys):
+    code = main(["use", "dev-heavy", "--dry-run"], commands=[env["make"](UseCommand)])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "[dry-run] would activate dev-heavy" in out
+    assert "model:    opus" in out
+    # nothing created
+    assert not (env["project"] / ".claude").exists()
+    assert not (env["project"] / ".cairn").exists()
+
+
+def test_doctor_reports_and_exits_nonzero_on_problem(env, capsys):
+    # dev-heavy links a vault skill, then we break the vault by removing it -> dangling link
+    main(["use", "dev-heavy"], commands=[env["make"](UseCommand)])
+    (env["vault_root"] / "skills" / "develop").rmdir()  # now the symlink dangles
+    capsys.readouterr()
+
+    doctor = env["make"](DoctorCommand, ping=lambda e: True)
+    code = main(["doctor"], commands=[doctor])
+
+    out = capsys.readouterr().out
+    assert "links:" in out
+    assert code == 1  # dangling link is a failure
+
+
+def test_recall_searches_notes(env, capsys):
+    # Seed a checkpoint, then find it
+    main(
+        ["checkpoint", "-m", "chose Postgres for the store"],
+        commands=[env["make"](CheckpointCommand)],
+    )
+    capsys.readouterr()
+
+    main(["recall", "postgres"], commands=[env["make"](RecallCommand)])
+
+    out = capsys.readouterr().out
+    assert "[note] proj" in out
 
 
 def test_init_vault_path_relocates_vault_and_remembers_it(env, capsys, tmp_path, monkeypatch):
