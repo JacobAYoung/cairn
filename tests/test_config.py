@@ -170,3 +170,25 @@ def test_profile_with_non_string_model_raises(tmp_path):
     path = _write(tmp_path / "profiles.toml", "[profiles.bad]\nmodel = 5\n")
     with pytest.raises(ConfigError, match="model must be a string"):
         load_profiles(path)
+
+
+def test_profile_mcp_and_extends_parse(tmp_path):
+    path = _write(
+        tmp_path / "profiles.toml",
+        """
+        [profiles.research]
+        extends = "base"
+        [profiles.research.mcp.brave]
+        command = "npx"
+        args = ["-y", "server-brave"]
+        """,
+    )
+    research = load_profiles(path)["research"]
+    assert research.extends == ("base",)
+    assert research.mcp == {"brave": {"command": "npx", "args": ["-y", "server-brave"]}}
+
+
+def test_profile_with_non_table_mcp_raises(tmp_path):
+    path = _write(tmp_path / "profiles.toml", '[profiles.bad]\nmcp = "nope"\n')
+    with pytest.raises(ConfigError, match="mcp must be a table"):
+        load_profiles(path)

@@ -28,12 +28,13 @@ STATE_NAME = "state.json"
 
 @dataclass(frozen=True)
 class Bundle:
-    """The merged result of one or more profiles: what to link and which model to set."""
+    """The merged result of one or more profiles: what to link, the model, and MCP servers."""
 
     profiles: tuple[str, ...]
     skills: tuple[str, ...]
     memories: tuple[str, ...]
     model: str | None
+    mcp: dict[str, dict]
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class ActivationResult:
     linked_skills: tuple[str, ...]
     linked_memories: tuple[str, ...]
     model: str | None
+    mcp: tuple[str, ...] = ()
 
 
 def _dedupe(items: tuple[str, ...]) -> tuple[str, ...]:
@@ -56,11 +58,12 @@ def _dedupe(items: tuple[str, ...]) -> tuple[str, ...]:
 
 def _effective(
     profiles: dict[str, Profile], name: str, stack: tuple[str, ...]
-) -> tuple[tuple[str, ...], tuple[str, ...], str | None]:
-    """Resolve a profile's effective (skills, memories, model), expanding ``extends``.
+) -> tuple[tuple[str, ...], tuple[str, ...], str | None, dict[str, dict]]:
+    """Resolve a profile's effective (skills, memories, model, mcp), expanding ``extends``.
 
     Parents are applied first (in listed order), then the profile itself, so a child overrides an
-    inherited model and appends its own skills/memories. Raises on an unknown parent or a cycle.
+    inherited model / MCP server and appends its own skills/memories. Raises on an unknown parent
+    or a cycle.
     """
     if name not in profiles:
         available = ", ".join(sorted(profiles)) or "(none)"
@@ -72,17 +75,20 @@ def _effective(
     skills: tuple[str, ...] = ()
     memories: tuple[str, ...] = ()
     model: str | None = None
+    mcp: dict[str, dict] = {}
     for parent in profile.extends:
-        p_skills, p_memories, p_model = _effective(profiles, parent, (*stack, name))
+        p_skills, p_memories, p_model, p_mcp = _effective(profiles, parent, (*stack, name))
         skills += p_skills
         memories += p_memories
+        mcp.update(p_mcp)
         if p_model is not None:
             model = p_model
     skills += profile.skills
     memories += profile.memories
+    mcp.update(profile.mcp)
     if profile.model is not None:
         model = profile.model
-    return skills, memories, model
+    return skills, memories, model, mcp
 
 
 def resolve_bundle(profiles: dict[str, Profile], names: list[str]) -> Bundle:
@@ -98,13 +104,15 @@ def resolve_bundle(profiles: dict[str, Profile], names: list[str]) -> Bundle:
     skills: tuple[str, ...] = ()
     memories: tuple[str, ...] = ()
     model: str | None = None
+    mcp: dict[str, dict] = {}
     for name in names:
-        n_skills, n_memories, n_model = _effective(profiles, name, ())
+        n_skills, n_memories, n_model, n_mcp = _effective(profiles, name, ())
         skills += n_skills
         memories += n_memories
+        mcp.update(n_mcp)
         if n_model is not None:
             model = n_model
-    return Bundle(tuple(names), _dedupe(skills), _dedupe(memories), model)
+    return Bundle(tuple(names), _dedupe(skills), _dedupe(memories), model, mcp)
 
 
 def _cairn_dir(project_dir: Path) -> Path:
@@ -180,7 +188,21 @@ def activate(project_dir: Path, vault: Vault, bundle: Bundle, *, now: str) -> Ac
         merged = {**prior_settings, "model": bundle.model}
         _write_json(settings_path, merged)
 
-    # 5. Manifest (reversal source of truth) + human-facing state.
+    # 5. MCP servers → project .mcp.json (merge; never clobber a hand-added server).
+    mcp_added: list[str] = []
+    if bundle.mcp:
+        mcp_path = project_dir / ".mcp.json"
+        mcp_data = json.loads(mcp_path.read_text()) if mcp_path.exists() else {}
+        servers = mcp_data.setdefault("mcpServers", {})
+        for server_name, server_cfg in bundle.mcp.items():
+            if server_name in servers:
+                continue
+            servers[server_name] = server_cfg
+            mcp_added.append(server_name)
+        if mcp_added:
+            _write_json(mcp_path, mcp_data)
+
+    # 6. Manifest (reversal source of truth) + human-facing state.
     _write_json(
         cairn / MANIFEST_NAME,
         {
@@ -188,6 +210,7 @@ def activate(project_dir: Path, vault: Vault, bundle: Bundle, *, now: str) -> Ac
             "model_written": model_written,
             "prior_had_model": prior_had_model,
             "prior_model": prior_model,
+            "mcp_added": mcp_added,
         },
     )
     _write_json(
@@ -201,6 +224,7 @@ def activate(project_dir: Path, vault: Vault, bundle: Bundle, *, now: str) -> Ac
         linked_skills=bundle.skills,
         linked_memories=bundle.memories,
         model=bundle.model,
+        mcp=tuple(mcp_added),
     )
 
 
@@ -222,6 +246,17 @@ def deactivate(project_dir: Path) -> tuple[str, ...]:
         link_path = project_dir / rel
         if link_path.is_symlink():
             link_path.unlink()
+
+    # Remove only the MCP servers Cairn added; leave hand-added servers intact.
+    mcp_added = manifest.get("mcp_added", [])
+    if mcp_added:
+        mcp_path = project_dir / ".mcp.json"
+        if mcp_path.exists():
+            mcp_data = json.loads(mcp_path.read_text())
+            servers = mcp_data.get("mcpServers", {})
+            for server_name in mcp_added:
+                servers.pop(server_name, None)
+            _write_json(mcp_path, mcp_data)
 
     # Restore the model key to its pre-activation state.
     if manifest.get("model_written"):

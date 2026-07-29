@@ -111,6 +111,12 @@ extends  = ["base"]              # inherit base's skills/memories; add/override 
 skills   = ["audit-and-review"]
 model    = "opus"
 delegate = true
+
+[profiles.research]
+skills = ["web-notes"]
+[profiles.research.mcp.brave]   # MCP servers activate into the project's .mcp.json
+command = "npx"
+args    = ["-y", "@modelcontextprotocol/server-brave-search"]
 ```
 
 ## Recipes

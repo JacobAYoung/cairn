@@ -114,6 +114,63 @@ def test_resolve_unknown_parent_raises():
         resolve_bundle(profiles, ["dev"])
 
 
+def test_resolve_merges_mcp_with_inheritance_override():
+    profiles = {
+        "base": Profile("base", mcp={"brave": {"command": "base"}, "fs": {"command": "fs"}}),
+        "dev": Profile("dev", extends=("base",), mcp={"brave": {"command": "override"}}),
+    }
+    bundle = resolve_bundle(profiles, ["dev"])
+    # inherited fs kept; brave overridden by child
+    assert bundle.mcp == {"brave": {"command": "override"}, "fs": {"command": "fs"}}
+
+
+def test_activate_writes_mcp_json_and_records_added(tmp_path):
+    vault = _vault(tmp_path / "vault")
+    project = tmp_path / "proj"
+    project.mkdir()
+    profiles = {"research": Profile("research", ("develop",), mcp={"brave": {"command": "npx"}})}
+    bundle = resolve_bundle(profiles, ["research"])
+
+    result = activate(project, vault, bundle, now=NOW)
+
+    mcp = json.loads((project / ".mcp.json").read_text())
+    assert mcp["mcpServers"]["brave"] == {"command": "npx"}
+    assert result.mcp == ("brave",)
+    assert json.loads((project / ".cairn" / "manifest.json").read_text())["mcp_added"] == ["brave"]
+
+
+def test_activate_does_not_clobber_hand_added_mcp_server(tmp_path):
+    vault = _vault(tmp_path / "vault")
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / ".mcp.json").write_text(
+        json.dumps({"mcpServers": {"brave": {"command": "MINE"}}})
+    )
+    profiles = {"research": Profile("research", ("develop",), mcp={"brave": {"command": "npx"}})}
+
+    result = activate(project, vault, resolve_bundle(profiles, ["research"]), now=NOW)
+
+    # hand-added server untouched; Cairn recorded nothing to remove later
+    mcp = json.loads((project / ".mcp.json").read_text())
+    assert mcp["mcpServers"]["brave"] == {"command": "MINE"}
+    assert result.mcp == ()
+
+
+def test_deactivate_removes_only_cairn_mcp_servers(tmp_path):
+    vault = _vault(tmp_path / "vault")
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / ".mcp.json").write_text(json.dumps({"mcpServers": {"kept": {"command": "x"}}}))
+    profiles = {"research": Profile("research", ("develop",), mcp={"brave": {"command": "npx"}})}
+    activate(project, vault, resolve_bundle(profiles, ["research"]), now=NOW)
+
+    deactivate(project)
+
+    servers = json.loads((project / ".mcp.json").read_text())["mcpServers"]
+    assert "brave" not in servers  # Cairn's server removed
+    assert servers["kept"] == {"command": "x"}  # hand-added server preserved
+
+
 # --- activate (filesystem) ----------------------------------------------------------------
 
 

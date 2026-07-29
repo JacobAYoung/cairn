@@ -141,6 +141,7 @@ class UseCommand(_Base):
             print(f"  skills:   {', '.join(bundle.skills) or '(none)'}")
             print(f"  memories: {', '.join(bundle.memories) or '(none)'}")
             print(f"  model:    {bundle.model or '(unchanged)'}")
+            print(f"  mcp:      {', '.join(bundle.mcp) or '(none)'}")
             print("  nothing was changed.")
             return 0
 
@@ -149,6 +150,7 @@ class UseCommand(_Base):
         print(f"  skills:   {', '.join(result.linked_skills) or '(none)'}")
         print(f"  memories: {', '.join(result.linked_memories) or '(none)'}")
         print(f"  model:    {result.model or '(unchanged)'}")
+        print(f"  mcp:      {', '.join(result.mcp) or '(none)'}")
         print("  (takes effect on the next Claude Code session)")
         return 0
 

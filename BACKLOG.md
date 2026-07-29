@@ -122,8 +122,11 @@ two moat pillars (**bundle-toggle** or **cross-machine**) or the honest token-sa
 scheduled; promote into a phase when it proves worth the weight.
 
 *Extends the bundle wedge:*
-- [ ] **#5.1** Bundle **MCP servers + hooks** into profiles (toggle every Claude Code primitive, not
-      just skills/memories) — the most on-brand expansion.
+- [x] **#5.1** Bundle **MCP servers** into profiles: a profile's `[profiles.X.mcp.<server>]` tables are
+      merged into the project's `.mcp.json` on activate (never clobbering a hand-added server, tracked
+      in the manifest) and removed on clear. Merges across inheritance + multiple profiles. 6 tests.
+      (Hooks-in-profiles deferred: risks colliding with the init-installed SessionStart hook — revisit
+      if a concrete need appears.)
 - [x] **#5.2** Profile **inheritance** — `extends` (parents first, child overrides), cycle-detected.
 - [ ] **#5.3** **Auto-activation** by project markers (pyproject → python, git remote → work). (Partly
       served already by `[defaults].profile` auto-activation via the SessionStart hook.)

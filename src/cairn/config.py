@@ -42,6 +42,8 @@ class Profile:
     model: str | None = None
     delegate: bool = False
     extends: tuple[str, ...] = ()
+    # server-name -> opaque MCP server config (passed through to the project's .mcp.json)
+    mcp: dict[str, dict] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -175,6 +177,9 @@ def load_profiles(path: Path) -> dict[str, Profile]:
         raw_extends = body.get("extends", [])
         if isinstance(raw_extends, str):
             raw_extends = [raw_extends]
+        mcp = body.get("mcp", {})
+        if not isinstance(mcp, dict) or not all(isinstance(v, dict) for v in mcp.values()):
+            raise ConfigError(f"profile {name!r}: mcp must be a table of server-name -> config")
         profiles[name] = Profile(
             name=name,
             skills=_require_str_list(body.get("skills", []), where=f"profile {name!r}: skills"),
@@ -184,5 +189,6 @@ def load_profiles(path: Path) -> dict[str, Profile]:
             model=model,
             delegate=bool(body.get("delegate", False)),
             extends=_require_str_list(raw_extends, where=f"profile {name!r}: extends"),
+            mcp={k: dict(v) for k, v in mcp.items()},
         )
     return profiles
