@@ -11,32 +11,44 @@ local models (free tokens) and keeps warm-start notes so new sessions skip expen
 - **Roadmap & goals:** [BACKLOG.md](BACKLOG.md)
 - **Engineering standards (enforced):** [CLAUDE.md](CLAUDE.md)
 
-> Status: **early scaffolding.** The CLI dispatch layer and packaging are in place; real
-> subcommands (`use`, `status`, `ask`, …) are landing per the backlog.
+## Quickstart
 
-## Install & set up
-
-Two one-time commands per machine:
+**Requires:** Python 3.11+ and [`pipx`](https://pipx.pypa.io) (`brew install pipx` on macOS). A local
+[Ollama](https://ollama.com) is optional (only for `cairn ask` delegation).
 
 ```bash
-pipx install cairn     # once published
-cairn init             # scaffold the vault, import your ~/.claude skills/memories,
-                       # install the Cairn skill + a SessionStart hook into ~/.claude
+pipx install git+https://github.com/JacobAYoung/cairn.git
+cairn init      # scaffold the vault (~/.cairn), import your ~/.claude skills/memories,
+                # install the Cairn skill + a SessionStart hook into ~/.claude
 ```
 
-After that, edit the `default` profile in `~/.cairn/profiles.toml`. From then on it's automatic:
-every Claude session runs the hook, which auto-activates your default profile and loads your latest
-warm-start note — no per-session commands. Switch setups per project with `cairn use <profile>`.
+Then open `~/.cairn/profiles.toml` and list the skills/memories you want everywhere in the `default`
+profile. That's it — from now on **every Claude Code session auto-loads your default bundle** (via the
+hook `init` installed) with no commands to run. Switch setups per project with `cairn use <profile>`,
+and check health anytime with `cairn doctor`.
 
-**Vault on a shared drive or git repo (single user, one or many machines):** point `CAIRN_HOME` at a
-synced/network folder with `[sync].mode = "folder"`, or use `[sync].mode = "git"` for a git-repo vault.
+> `cairn` must be on your PATH so the hook can find it — pipx handles this; verify with `which cairn`.
+> To update later: `pipx install --force git+https://github.com/JacobAYoung/cairn.git`.
+
+## Share one vault across your machines
+
+The vault is just a folder (`~/.cairn`), so point it at anything that syncs:
+
+- **Cloud folder (simplest):** `cairn init --vault-path ~/Dropbox/cairn --sync folder` (or iCloud/OneDrive).
+  Dropbox/iCloud does the syncing; Cairn just lives there. On the second machine run the same command
+  with the same path — your skills, memories, and profiles are already there.
+- **Syncthing (no cloud):** put `~/.cairn` in a Syncthing-shared folder and set `[sync].mode = "syncthing"`.
+- **Git repo:** `cairn init --vault-path ~/cairn-vault --sync git`, then `git init` + add a remote in
+  that folder; `cairn` wraps pull/commit/push in the background.
+
+`--vault-path` is remembered in `~/.config/cairn/location`, so you set it once per machine.
 
 ## Develop
 
 Requires Python 3.11+ (for stdlib `tomllib`).
 
 ```bash
-git clone <repo> && cd cairn
+git clone https://github.com/JacobAYoung/cairn.git && cd cairn
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
@@ -52,7 +64,7 @@ Cairn needs **no plugin, API, or MCP server**. It integrates at two levels, both
 1. **Setup-time:** `cairn use` writes into the files Claude Code already reads at session start —
    `.claude/skills/`, `.claude/rules/`, `.claude/settings.local.json`. Activation *is* the integration.
 2. **Runtime:** it's a plain CLI on your `PATH`, so Claude can call `cairn use`/`ask`/`checkpoint`
-   directly. A bundled Cairn skill (planned) teaches Claude *when* to reach for those commands.
+   directly. A bundled Cairn skill (installed by `cairn init`) teaches Claude *when* to reach for them.
 
 **Model-agnostic by design:** everything except the activation *target* is already agent-neutral —
 the vault, profiles, sync, mailbox, warm-start, and `cairn ask` (which talks to any local model). A
@@ -120,28 +132,17 @@ command = "npx"
 args    = ["-y", "@modelcontextprotocol/server-brave-search"]
 ```
 
-## Recipes
+## Share a profile with a friend
 
-**Vault on a network / shared drive (no git dance):**
-```bash
-cairn init --vault-path /Volumes/team-share/cairn --sync folder
-```
-The location is remembered (`~/.config/cairn/location`); the drive's own sync carries it between machines.
+A profile (its skills + memories + model + MCP servers) travels as a self-contained bundle:
 
-**Vault as a git repo:**
-```bash
-cairn init --vault-path ~/cairn-vault --sync git   # then `git init` + add a remote in that dir
-```
-`cairn` wraps pull/commit/push; run any command and sync is best-effort in the background.
-
-**Second machine:** `pipx install cairn && cairn init --vault-path <same synced path>`.
-
-**Share a profile with a friend:**
 ```bash
 cairn export dev-heavy ./dev-heavy-bundle   # then push that dir to a GitHub repo
 # your friend:
 cairn install https://github.com/you/dev-heavy-bundle
 ```
+
+`install` also takes a local directory, and skips anything already in your vault (never clobbers).
 
 ## Design principles
 
