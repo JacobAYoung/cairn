@@ -11,6 +11,30 @@ local models (free tokens) and keeps warm-start notes so new sessions skip expen
 - **Roadmap & goals:** [BACKLOG.md](BACKLOG.md)
 - **Engineering standards (enforced):** [CLAUDE.md](CLAUDE.md)
 
+## Features
+
+- **🗄 Vault** — one central home (`~/.cairn`) for all your skills and memories, as plain markdown.
+  Portable across every project and machine; no opaque database.
+- **📦 Profiles (toggleable bundles)** — name a bundle of *skills + memories + model + MCP servers*,
+  then `cairn use <profile>` to switch it on per project. Supports inheritance (`extends`).
+- **✨ Auto-activation** — a `SessionStart` hook loads your `default` profile (and latest note) into
+  every Claude session automatically. No per-session commands.
+- **💸 Token optimizer** — two levers that cut real cost:
+  - **Local-model delegation** (`cairn ask`) — offload bulk/mechanical work to a local Ollama model
+    for *free* tokens while Claude stays the driver.
+  - **Warm-start** (`cairn checkpoint` / `brief`) — distill a session into a short note so the next
+    one skips expensive re-exploration.
+- **🌐 Cross-machine** — one synced vault (cloud folder / Syncthing / git), synced auto-memory,
+  mailbox messaging (`send` / `inbox`), and `handoff` / `resume` to carry work between machines.
+- **🔎 Recall** — full-text search (`cairn recall`) across your memories and warm-start notes.
+- **🩺 Doctor** — `cairn doctor` health-checks vault, config, links, sync, and delegation.
+- **🤝 Shareable bundles** — `cairn export` / `cairn install` package a profile (e.g. via a GitHub URL)
+  so teammates get your exact skills + memories in one command.
+
+Design ethos: **no admin, minimal dependencies, files are the source of truth, and it rides native
+Claude Code primitives** (`.claude/rules/` symlinks, `settings.local.json`, the SessionStart hook)
+rather than replacing them.
+
 ## Quickstart
 
 **Requires:** Python 3.11+ and [`pipx`](https://pipx.pypa.io) (`brew install pipx` on macOS). A local
