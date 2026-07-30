@@ -20,6 +20,10 @@ dev = [
     "ruff>=0.6",
 ]
 
+[project.urls]
+Homepage = "https://github.com/JacobAYoung/cairn"
+Repository = "https://github.com/JacobAYoung/cairn"
+
 [project.scripts]
 cairn = "cairn.cli:main"
 
