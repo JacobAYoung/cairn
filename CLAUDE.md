@@ -6,9 +6,9 @@ Cairn is a small **CLI + one TOML config file** that turns Claude Code's scatter
 (skills, per-scope settings, per-subagent model choice, `~/.claude`) into a **portable, toggleable,
 cross-machine vault** — with cheap local-model delegation and warm-start memory to cut token cost.
 
-- **Design:** [SPEC.md](SPEC.md) — pillars, config, activation/sync/delegate mechanics, verified
+- **Design:** [SPEC.md](docs/SPEC.md) — pillars, config, activation/sync/delegate mechanics, verified
   Claude Code integration points (Appendix D).
-- **Roadmap & product goals:** [BACKLOG.md](BACKLOG.md) — what we're building and why; keep it updated
+- **Roadmap & product goals:** [BACKLOG.md](docs/BACKLOG.md) — what we're building and why; keep it updated
   as tasks move.
 
 Resolved decisions: **TOML** config · **Syncthing** default sync · name **Cairn** · **Python + pipx**
@@ -65,7 +65,7 @@ Every module gets a matching test file. Tests validate **actual behavior**, not 
 
 ## Workflow
 
-1. Pick the next unchecked task in [BACKLOG.md](BACKLOG.md) phase order; mark it `[~]` before starting.
+1. Pick the next unchecked task in [BACKLOG.md](docs/BACKLOG.md) phase order; mark it `[~]` before starting.
 2. Meet every standard above — including tests and docs — *as part of the task*, not later.
 3. Mark `[x]` with a one-line note when done; commit with a clear message.
 4. Never break existing behavior; keep the test suite green.

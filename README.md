@@ -7,9 +7,11 @@ skills, per-scope settings, per-subagent model choice, `~/.claude` — into name
 **toggle per project** and that **follow you across machines**. It also offloads cheap bulk work to
 local models (free tokens) and keeps warm-start notes so new sessions skip expensive re-exploration.
 
-- **Design:** [SPEC.md](SPEC.md)
-- **Roadmap & goals:** [BACKLOG.md](BACKLOG.md)
-- **Engineering standards (enforced):** [CLAUDE.md](CLAUDE.md)
+**Documentation:**
+- 📖 [User Guide](docs/USER_GUIDE.md) — every feature, how to use and customize it
+- 🏗 [Architecture](docs/ARCHITECTURE.md) — how the code is put together (for contributors)
+- 🧭 [Design & positioning](docs/SPEC.md) · [Roadmap](docs/BACKLOG.md) · [Research notes](docs/RESEARCH.md)
+- 🤝 [Contributing](CONTRIBUTING.md) · engineering standards in [CLAUDE.md](CLAUDE.md)
 
 ## Features
 
@@ -173,4 +175,4 @@ cairn install https://github.com/you/dev-heavy-bundle
 No admin ever for core features · minimal dependencies (only `httpx`) · one human-editable TOML
 config · CLI-first · drivable by Claude itself · reversible and non-destructive · **files are the
 source of truth** (no opaque database). See [CLAUDE.md](CLAUDE.md) for the full engineering standard
-every change must meet, and [SPEC.md](SPEC.md) for design + positioning.
+every change must meet, and [SPEC.md](docs/SPEC.md) for design + positioning.
