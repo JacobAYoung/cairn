@@ -31,6 +31,21 @@ def test_inbox_lists_newest_first_with_sender(tmp_path):
     assert messages[1].sender == "desktop"
 
 
+def test_same_sender_same_stamp_does_not_overwrite(tmp_path):
+    # Regression: a direct send followed by a broadcast (same sender, same second) must not clobber.
+    vault = Vault(tmp_path / "vault")
+
+    first = send(vault, "laptop", "direct hello", from_machine="desktop", stamp="20260729T100000Z")
+    second = send(vault, "laptop", "broadcast hi", from_machine="desktop", stamp="20260729T100000Z")
+
+    # Two distinct files on disk, neither lost
+    assert first != second
+    assert second.name == "20260729T100000Z--dup2--from-desktop.md"
+    assert {m.body for m in inbox(vault, "laptop")} == {"direct hello", "broadcast hi"}
+    # The dup marker sits before the sender tag, so the parsed sender stays clean
+    assert all(m.sender == "desktop" for m in inbox(vault, "laptop"))
+
+
 def test_inbox_empty_when_no_box(tmp_path):
     assert inbox(Vault(tmp_path / "vault"), "laptop") == []
 
