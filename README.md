@@ -116,6 +116,7 @@ Claude for now.
 | `cairn recall "<query>"` | Full-text search across memories + warm-start notes |
 | `cairn sync-memory [--off]` | Point Claude's auto-memory at the synced vault |
 | `cairn send <machine> "<msg>"` · `cairn inbox [--read]` | Mailbox messages to a machine **or** session (Tier-0) |
+| `cairn inbox --wait [--timeout N]` | Block until a message arrives, then show it (turn-taking) |
 | `cairn broadcast "<msg>"` | Message every other live session on this machine |
 | `cairn session start\|ls\|whoami\|end\|prune` | Same-machine session roster (identity + presence) |
 | `cairn handoff <machine>` · `cairn resume` | Carry active profile + latest brief to another machine |

@@ -117,7 +117,22 @@ session-scoped names instead of hostnames.
 | `cairn session end [name]` | Remove a session from the roster |
 | `cairn session prune` | Remove sessions not seen within the staleness window |
 | `cairn send <name> "<msg>"` · `cairn inbox` | One-to-one message to a session (unchanged commands) |
+| `cairn inbox --wait [--timeout N]` | Block until a message arrives, then show it (turn-taking) |
 | `cairn broadcast "<msg>"` | One-to-many message to every other live session |
+
+### Staying connected — `cairn inbox --wait`
+
+A Claude Code session is turn-based: nothing runs between turns, and no outside process can inject
+into a session that is mid-turn. So "constantly listening" is best served not by interval polling but
+by a **blocking receive**: `cairn inbox --wait` parks on the mailbox and returns *the instant* a
+message lands — the return itself is the alert, and the model continues immediately (read → reply →
+wait again). Because the waiting happens in the CLI subprocess, no model tokens are spent while
+blocked. `--timeout N` caps the wait (default: forever) and returns empty on expiry so the caller can
+loop or give up. Under the hood it is a short dependency-free poll (`DEFAULT_POLL_INTERVAL`, 1s) that
+also runs the sync backend's `pull` each cycle, so it works cross-machine as well as same-machine.
+
+Pair it with the `/loop` skill (or just have the session re-issue the wait after each message) to get
+a genuine event-driven receive loop between two sessions.
 
 ---
 
@@ -127,7 +142,8 @@ Tracked in [BACKLOG.md](BACKLOG.md); listed here so the design intent is on reco
 
 - **Inbox surfacing at SessionStart** — have the hook mention unread count/preview so a session *notices*
   mail without polling `inbox`. (The hook must still never break a session — additive, best-effort.)
-- **Blocking wait** — `cairn inbox --wait [--timeout N]` to await a reply (poll loop), for turn-taking.
+- **Desktop alerts** — a `cairn watch` that blocks and fires an OS notification when mail arrives, to
+  tap the *human* on the shoulder (nothing can wake a mid-turn session; this alerts the person instead).
 - **Auto-heartbeat** — optionally refresh `last_seen_utc` on any command so presence is accurate without
   explicit `session start`, weighed against adding a write to read-only commands.
 - **Threaded replies** — carry a conversation id so `inbox` can group a back-and-forth.
