@@ -60,3 +60,27 @@ def test_machine_name_strips_domain(monkeypatch):
 def test_machine_name_falls_back_when_empty(monkeypatch):
     monkeypatch.setattr(system.socket, "gethostname", lambda: "")
     assert system.default_machine_name() == "cairn"
+
+
+def test_machine_override_reads_env(monkeypatch):
+    # Arrange
+    monkeypatch.setenv(system.CAIRN_MACHINE_ENV, "sessionA")
+
+    # Act / Assert: the exact exported identity is returned
+    assert system.machine_name_override() == "sessionA"
+
+
+def test_machine_override_strips_surrounding_whitespace(monkeypatch):
+    monkeypatch.setenv(system.CAIRN_MACHINE_ENV, "  sessionB  ")
+    assert system.machine_name_override() == "sessionB"
+
+
+def test_machine_override_none_when_unset(monkeypatch):
+    monkeypatch.delenv(system.CAIRN_MACHINE_ENV, raising=False)
+    assert system.machine_name_override() is None
+
+
+def test_machine_override_blank_treated_as_unset(monkeypatch):
+    # An exported-but-empty variable must not become an invalid "" identity.
+    monkeypatch.setenv(system.CAIRN_MACHINE_ENV, "   ")
+    assert system.machine_name_override() is None

@@ -11,10 +11,12 @@ import json
 
 import pytest
 
+from cairn import sessions
 from cairn.cli import main
 from cairn.commands import (
     AskCommand,
     BriefCommand,
+    BroadcastCommand,
     CheckpointCommand,
     ClearCommand,
     DoctorCommand,
@@ -28,11 +30,14 @@ from cairn.commands import (
     RecallCommand,
     ResumeCommand,
     SendCommand,
+    SessionCommand,
     SessionStartCommand,
     StatusCommand,
     SyncMemoryCommand,
     UseCommand,
 )
+from cairn.system import default_machine_name
+from cairn.vault import Vault
 
 
 @pytest.fixture
@@ -379,3 +384,103 @@ def test_init_vault_path_relocates_vault_and_remembers_it(env, capsys, tmp_path,
     assert (net_vault / "cairn.toml").exists()
     pointer = tmp_path / "home" / ".config" / "cairn" / "location"
     assert pointer.read_text().strip() == str(net_vault)
+
+
+# --- same-PC sessions: session roster + broadcast -------------------------------------------
+
+
+def _session_cmd(env, cmd_cls, now="2026-07-30T10:00:00"):
+    """A session/broadcast command over the temp vault with a *real* ISO clock (roster listings
+    parse timestamps, so the fixture's ``T0`` sentinel won't do)."""
+    return cmd_cls(
+        vault_root=lambda: env["vault_root"], cwd=lambda: env["project"], now=lambda: now
+    )
+
+
+def test_session_whoami_reports_override_identity(env, capsys, monkeypatch):
+    monkeypatch.setenv("CAIRN_MACHINE", "sessionA")
+
+    code = main(["session", "whoami"], commands=[env["make"](SessionCommand)])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "identity: sessionA" in out
+    assert "source:   $CAIRN_MACHINE" in out
+
+
+def test_session_start_registers_and_prints_export_hint(env, capsys, monkeypatch):
+    # No CAIRN_MACHINE exported, so this shell isn't yet "sessionA" -> hint should appear
+    monkeypatch.delenv("CAIRN_MACHINE", raising=False)
+
+    code = main(
+        ["session", "start", "sessionA"], commands=[_session_cmd(env, SessionCommand)]
+    )
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Registered session 'sessionA'" in out
+    assert "export CAIRN_MACHINE=sessionA" in out
+    # On-disk presence file created with the right identity/host
+    record = json.loads((env["vault_root"] / "sessions" / "sessionA.json").read_text())
+    assert record["name"] == "sessionA"
+    assert record["host"] == default_machine_name()
+
+
+def test_session_start_without_name_or_env_exits_one(env, capsys, monkeypatch):
+    monkeypatch.delenv("CAIRN_MACHINE", raising=False)
+
+    code = main(["session", "start"], commands=[_session_cmd(env, SessionCommand)])
+
+    assert code == 1
+    assert "no session name" in capsys.readouterr().err
+
+
+def test_session_ls_marks_live_session(env, capsys, monkeypatch):
+    monkeypatch.delenv("CAIRN_MACHINE", raising=False)
+    main(
+        ["session", "start", "sessionA"],
+        commands=[_session_cmd(env, SessionCommand, now="2026-07-30T10:00:00")],
+    )
+    capsys.readouterr()
+
+    # List 5 seconds later
+    code = main(
+        ["session", "ls"],
+        commands=[_session_cmd(env, SessionCommand, now="2026-07-30T10:00:05")],
+    )
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "● sessionA" in out  # live marker
+    assert "seen 5s ago" in out
+    assert "project=proj" in out
+
+
+def test_broadcast_fans_out_to_peers_except_self(env, capsys, monkeypatch):
+    monkeypatch.setenv("CAIRN_MACHINE", "sessionA")
+    host = default_machine_name()
+    vault = env["vault_root"]
+    # Seed three sessions on this host (including self, to prove self is excluded)
+    for peer in ("sessionA", "sessionB", "sessionC"):
+        sessions.register(Vault(vault), peer, host=host, project="p", now="2026-07-30T10:00:00")
+
+    code = main(["broadcast", "hello all"], commands=[env["make"](BroadcastCommand)])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Broadcast to 2 session(s): sessionB, sessionC" in out
+    # Messages landed for the two peers, never for the sender
+    assert (vault / "mailbox" / "sessionB").is_dir()
+    assert (vault / "mailbox" / "sessionC").is_dir()
+    assert not (vault / "mailbox" / "sessionA").exists()
+
+
+def test_broadcast_with_no_peers_prints_guidance(env, capsys, monkeypatch):
+    monkeypatch.setenv("CAIRN_MACHINE", "solo")
+
+    code = main(["broadcast", "anyone?"], commands=[env["make"](BroadcastCommand)])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "No other sessions registered" in out
+    assert not (env["vault_root"] / "mailbox").exists()

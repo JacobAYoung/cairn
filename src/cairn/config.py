@@ -108,14 +108,21 @@ def _require_str_list(value: object, *, where: str) -> tuple[str, ...]:
     return tuple(value)
 
 
-def load_cairn_config(path: Path, *, default_machine_name: str) -> CairnConfig:
+def load_cairn_config(
+    path: Path, *, default_machine_name: str, machine_override: str | None = None
+) -> CairnConfig:
     """Load ``cairn.toml`` into a :class:`CairnConfig`, applying defaults and validating values.
 
     ``default_machine_name`` (typically the hostname) is used when ``[machine].name`` is absent.
+    ``machine_override`` (typically ``$CAIRN_MACHINE``) wins over both the file and the default,
+    giving each session on a shared vault its own mailbox identity. ``None`` means "not overridden".
     """
     data = _read_toml(path)
 
-    machine_name = data.get("machine", {}).get("name", default_machine_name)
+    if machine_override is not None:
+        machine_name = machine_override
+    else:
+        machine_name = data.get("machine", {}).get("name", default_machine_name)
     if not isinstance(machine_name, str) or not machine_name:
         raise ConfigError("[machine].name must be a non-empty string")
 

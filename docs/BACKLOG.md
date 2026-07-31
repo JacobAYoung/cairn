@@ -96,6 +96,15 @@ These are not a phase; they are the definition of done for all work.
       SPEC marks it "build last, only if Tier-0 isn't enough." Tier-0 covers the stated need (carry
       knowledge between machines) with zero ports/admin, so this stays parked until a concrete real-time
       need appears.
+- [x] **#3.3** Same-machine sessions — several Claude sessions on ONE machine share the vault but take
+      distinct mailbox identities via `$CAIRN_MACHINE` (resolves over `[machine].name`, mirroring how
+      `$CAIRN_HOME` overrides the vault root). `sessions.py`: host-scoped presence roster (register/
+      heartbeat/ls/end/prune, traversal-safe names, corrupt-file-tolerant); `cairn session <action>` +
+      `cairn broadcast` (one-to-many to live peers). Design in [SESSIONS.md](SESSIONS.md). 30 tests
+      (24 module + 6 CLI). Verified end-to-end.
+  - [ ] **#3.3a** Surface unread mail at SessionStart (additive, best-effort — must never break a session).
+  - [ ] **#3.3b** `cairn inbox --wait [--timeout N]` blocking receive, for turn-taking between sessions.
+  - [ ] **#3.3c** Optional auto-heartbeat on any command (accurate presence without explicit `session start`).
 
 ## Phase 4 — Distribution & polish
 - [x] **#4.0** `cairn init` — one-time setup: scaffold vault + starter config (with a `default` profile

@@ -48,6 +48,13 @@ class Vault:
         return self.root / "mailbox"
 
     @property
+    def sessions_dir(self) -> Path:
+        """Roster of same-machine sessions (presence files). Machine-local runtime state, created
+        on demand by :mod:`cairn.sessions` — deliberately *not* in ``SUBDIRS`` (nothing to scaffold,
+        and it is per-machine rather than part of the portable/synced vault skeleton)."""
+        return self.root / "sessions"
+
+    @property
     def cairn_config_path(self) -> Path:
         return self.root / "cairn.toml"
 
