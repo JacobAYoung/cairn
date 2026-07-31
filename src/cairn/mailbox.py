@@ -31,11 +31,19 @@ def send(vault: Vault, to_machine: str, text: str, *, from_machine: str, stamp: 
     """Write a message addressed to ``to_machine``; returns the file path created.
 
     ``stamp`` is a sortable, filename-safe timestamp (e.g. ``20260729T142033Z``) so the recipient's
-    directory listing orders naturally and two senders never produce the same filename.
+    directory listing orders naturally. Different senders never collide (the filename carries the
+    sender); the *same* sender writing twice within one ``stamp`` tick — e.g. a direct ``send``
+    immediately followed by a ``broadcast`` — would, so a ``--dup<n>`` marker is inserted *before*
+    ``--from-`` when needed. This never overwrites an existing message, and the marker sits ahead of
+    the sender tag so :func:`inbox` still parses a clean sender name.
     """
     box = _box(vault, to_machine)
     box.mkdir(parents=True, exist_ok=True)
     path = box / f"{stamp}--from-{from_machine}.md"
+    dup = 2
+    while path.exists():
+        path = box / f"{stamp}--dup{dup}--from-{from_machine}.md"
+        dup += 1
     path.write_text(text.rstrip() + "\n")
     return path
 

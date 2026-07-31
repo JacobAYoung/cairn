@@ -83,6 +83,34 @@ def test_missing_file_yields_documented_defaults(tmp_path):
     assert config.default_profile is None
 
 
+def test_machine_override_wins_over_file_and_default(tmp_path):
+    # Arrange: the file names the machine "desktop"...
+    path = _write(tmp_path / "cairn.toml", '[machine]\nname = "desktop"\n')
+
+    # Act: ...but a per-session override is supplied
+    config = load_cairn_config(
+        path, default_machine_name="fallback", machine_override="sessionA"
+    )
+
+    # Assert: the override is the effective identity, beating both file and default
+    assert config.machine.name == "sessionA"
+
+
+def test_machine_override_none_falls_through_to_file(tmp_path):
+    path = _write(tmp_path / "cairn.toml", '[machine]\nname = "desktop"\n')
+
+    config = load_cairn_config(path, default_machine_name="fallback", machine_override=None)
+
+    assert config.machine.name == "desktop"
+
+
+def test_machine_override_empty_string_is_rejected(tmp_path):
+    # An override must be a real identity; "" would poison every mailbox path.
+    path = _write(tmp_path / "cairn.toml", '[machine]\nname = "desktop"\n')
+    with pytest.raises(ConfigError, match="machine..name must be a non-empty string"):
+        load_cairn_config(path, default_machine_name="fallback", machine_override="")
+
+
 def test_default_profile_parsed_and_validated(tmp_path):
     ok = _write(tmp_path / "cairn.toml", '[defaults]\nprofile = "dev-heavy"\n')
     assert load_cairn_config(ok, default_machine_name="h").default_profile == "dev-heavy"

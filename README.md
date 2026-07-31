@@ -28,6 +28,9 @@ local models (free tokens) and keeps warm-start notes so new sessions skip expen
     one skips expensive re-exploration.
 - **🌐 Cross-machine** — one synced vault (cloud folder / Syncthing / git), synced auto-memory,
   mailbox messaging (`send` / `inbox`), and `handoff` / `resume` to carry work between machines.
+- **🗪 Same-machine sessions** — run several Claude sessions on one computer; give each an identity
+  (`CAIRN_MACHINE`) so they discover each other (`session ls`) and message (`send` / `broadcast`).
+  See [docs/SESSIONS.md](docs/SESSIONS.md).
 - **🔎 Recall** — full-text search (`cairn recall`) across your memories and warm-start notes.
 - **🩺 Doctor** — `cairn doctor` health-checks vault, config, links, sync, and delegation.
 - **🤝 Shareable bundles** — `cairn export` / `cairn install` package a profile (e.g. via a GitHub URL)
@@ -112,7 +115,9 @@ Claude for now.
 | `cairn brief` | Print the latest warm-start note |
 | `cairn recall "<query>"` | Full-text search across memories + warm-start notes |
 | `cairn sync-memory [--off]` | Point Claude's auto-memory at the synced vault |
-| `cairn send <machine> "<msg>"` · `cairn inbox [--read]` | Cross-machine messages (Tier-0) |
+| `cairn send <machine> "<msg>"` · `cairn inbox [--read]` | Mailbox messages to a machine **or** session (Tier-0) |
+| `cairn broadcast "<msg>"` | Message every other live session on this machine |
+| `cairn session start\|ls\|whoami\|end\|prune` | Same-machine session roster (identity + presence) |
 | `cairn handoff <machine>` · `cairn resume` | Carry active profile + latest brief to another machine |
 | `cairn export <profile> <dir>` · `cairn install <url\|dir>` | Share a profile bundle (e.g. via GitHub) |
 | `cairn session-start` | Internal SessionStart hook target (auto-activates default + injects brief) |
@@ -124,6 +129,7 @@ Claude for now.
 ```toml
 [machine]
 name = "desktop"            # this machine's mailbox address (default: hostname)
+                            # per-session override: export CAIRN_MACHINE=<name> (see docs/SESSIONS.md)
 
 [sync]
 mode = "syncthing"          # off | folder | syncthing | git

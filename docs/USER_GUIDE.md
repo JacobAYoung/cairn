@@ -145,6 +145,33 @@ cairn resume                                        # on the laptop — shows it
 
 ---
 
+## Same machine — multiple sessions
+
+The mailbox above addresses *machines*. To let several Claude sessions on **one** computer talk to each
+other, give each its own identity by exporting `CAIRN_MACHINE` — then the same `send`/`inbox`/`broadcast`
+commands address sessions instead of hosts. No second vault, no ports, no setup. Full design in
+[SESSIONS.md](SESSIONS.md).
+
+```bash
+# terminal 1                         # terminal 2
+export CAIRN_MACHINE=builder         export CAIRN_MACHINE=reviewer
+cairn session start                  cairn session start      # register in the roster
+```
+
+```bash
+cairn session ls                     # who's here (● live / ○ stale) and what they're working on
+cairn session whoami                 # this shell's identity and where it came from
+
+cairn send reviewer "PR is up for #1420, take a look"   # one-to-one, read with: cairn inbox
+cairn broadcast "rebasing main in 5 — pause pushes"     # to every other live session
+```
+
+`session start` doubles as a heartbeat (re-run it to stay "live"); `session end` / `session prune` clean
+up the roster. Presence is per-machine, so a synced vault never mixes one computer's sessions with
+another's.
+
+---
+
 ## Recall — full-text search
 
 Search across all your memories and warm-start notes (SQLite full-text, ranked, with snippets):

@@ -22,6 +22,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+from cairn import sessions
 from cairn.activation import activate, deactivate, read_state, resolve_bundle
 from cairn.automemory import disable as auto_disable
 from cairn.automemory import enable as auto_enable
@@ -41,7 +42,12 @@ from cairn.mailbox import send as send_message
 from cairn.scaffold import write_starter_config
 from cairn.session_start import build_session_start_output
 from cairn.sync import make_sync_backend
-from cairn.system import default_machine_name, default_vault_root, set_vault_location
+from cairn.system import (
+    default_machine_name,
+    default_vault_root,
+    machine_name_override,
+    set_vault_location,
+)
 from cairn.vault import Vault
 
 
@@ -67,7 +73,9 @@ class _Base:
 
     def config(self) -> CairnConfig:
         return load_cairn_config(
-            self.vault().cairn_config_path, default_machine_name=default_machine_name()
+            self.vault().cairn_config_path,
+            default_machine_name=default_machine_name(),
+            machine_override=machine_name_override(),
         )
 
     def project_key(self) -> str:
@@ -178,9 +186,7 @@ class StatusCommand(_Base):
 
     def run(self, args: argparse.Namespace) -> int:
         vault = self.vault()
-        config = load_cairn_config(
-            vault.cairn_config_path, default_machine_name=default_machine_name()
-        )
+        config = self.config()
         state = read_state(self._cwd())
         sync_status = make_sync_backend(config.sync.mode, vault.root).status()
 
@@ -406,6 +412,148 @@ class InboxCommand(_Base):
         return 0
 
 
+def _format_age(seconds: float) -> str:
+    """Human-readable elapsed time for roster listings (e.g. ``12s``, ``5m``, ``2h``, ``3d``)."""
+    seconds = int(max(seconds, 0))
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    if seconds < 86400:
+        return f"{seconds // 3600}h"
+    return f"{seconds // 86400}d"
+
+
+class BroadcastCommand(_Base):
+    name = "broadcast"
+    help = "Send a message to every other session on this machine (same-PC fan-out)."
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("message", help="the message text")
+        parser.add_argument(
+            "--include-self",
+            action="store_true",
+            help="also deliver a copy to your own inbox",
+        )
+
+    def run(self, args: argparse.Namespace) -> int:
+        vault, cfg = self.vault(), self.config()
+        me, host = cfg.machine.name, default_machine_name()
+        peers = [
+            record.name
+            for record in sessions.roster(vault, host=host)
+            if args.include_self or record.name != me
+        ]
+        if not peers:
+            print(
+                "No other sessions registered on this machine. "
+                "Have each session run: cairn session start <name>"
+            )
+            return 0
+        for peer in peers:
+            send_message(vault, peer, args.message, from_machine=me, stamp=self.stamp())
+        make_sync_backend(cfg.sync.mode, vault.root).push(
+            f"cairn: broadcast to {len(peers)} session(s)"
+        )
+        print(f"Broadcast to {len(peers)} session(s): {', '.join(peers)}")
+        return 0
+
+
+class SessionCommand(_Base):
+    name = "session"
+    help = "Manage this machine's session roster (identity + presence for same-PC messaging)."
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        sub = parser.add_subparsers(dest="action", metavar="<action>", required=True)
+        start = sub.add_parser(
+            "start", help="register/refresh a session identity; prints its export line"
+        )
+        start.add_argument("name", nargs="?", help="session name (default: current $CAIRN_MACHINE)")
+        sub.add_parser("ls", help="list this machine's sessions with presence (live/stale)")
+        sub.add_parser("whoami", help="show this shell's effective session identity and its source")
+        stop = sub.add_parser("end", help="remove a session from the roster")
+        stop.add_argument("name", nargs="?", help="session name (default: current $CAIRN_MACHINE)")
+        sub.add_parser("prune", help="drop sessions not seen within the staleness window")
+
+    def _resolve_name(self, explicit: str | None) -> str:
+        """The session name to act on: an explicit CLI arg, else this shell's $CAIRN_MACHINE.
+
+        Raises :class:`CairnError` when neither is available, so the user gets an actionable
+        message instead of silently registering the hostname as a "session".
+        """
+        name = explicit or machine_name_override()
+        if not name:
+            raise CairnError(
+                "no session name: pass one (cairn session start <name>) or export CAIRN_MACHINE"
+            )
+        return name
+
+    def run(self, args: argparse.Namespace) -> int:
+        dispatch = {
+            "start": self._start,
+            "ls": self._ls,
+            "whoami": self._whoami,
+            "end": self._end,
+            "prune": self._prune,
+        }
+        return dispatch[args.action](args)
+
+    def _start(self, args: argparse.Namespace) -> int:
+        vault = self.vault()
+        name = self._resolve_name(args.name)
+        sessions.register(
+            vault, name, host=default_machine_name(), project=self.project_key(), now=self._now()
+        )
+        print(f"Registered session '{name}' on {default_machine_name()}.")
+        if machine_name_override() != name:
+            print("This shell is not yet that session. To become it, run:")
+            print(f"  export CAIRN_MACHINE={name}")
+        return 0
+
+    def _ls(self, args: argparse.Namespace) -> int:
+        vault = self.vault()
+        host, now = default_machine_name(), self._now()
+        records = sessions.roster(vault, host=host)
+        if not records:
+            print(f"No sessions registered on {host}. Start one: cairn session start <name>")
+            return 0
+        me = machine_name_override()
+        print(f"sessions on {host}:")
+        for record in records:
+            live = sessions.is_live(record, now=now)
+            marker = "●" if live else "○"
+            age = _format_age(sessions.seconds_between(record.last_seen_utc, now))
+            suffix = "" if live else " (stale)"
+            you = "  <- you" if record.name == me else ""
+            print(
+                f"  {marker} {record.name}   project={record.project}   "
+                f"seen {age} ago{suffix}{you}"
+            )
+        return 0
+
+    def _whoami(self, args: argparse.Namespace) -> int:
+        override = machine_name_override()
+        identity = self.config().machine.name
+        source = "$CAIRN_MACHINE" if override else "cairn.toml [machine].name / hostname"
+        print(f"identity: {identity}")
+        print(f"source:   {source}")
+        if override is None:
+            print("tip: export CAIRN_MACHINE=<name> to give this session its own mailbox")
+        return 0
+
+    def _end(self, args: argparse.Namespace) -> int:
+        name = self._resolve_name(args.name)
+        removed = sessions.end(self.vault(), name)
+        print(f"Removed session '{name}'." if removed else f"No session '{name}' in the roster.")
+        return 0
+
+    def _prune(self, args: argparse.Namespace) -> int:
+        removed = sessions.prune(self.vault(), now=self._now(), host=default_machine_name())
+        detail = f": {', '.join(removed)}" if removed else "."
+        print(f"Pruned {len(removed)} stale session(s){detail}")
+        return 0
+
+
 def _git_clone(url: str, dest: Path) -> None:
     """Shallow-clone ``url`` into ``dest``; raise CairnError on failure."""
     result = subprocess.run(
@@ -565,6 +713,8 @@ def all_commands() -> list:
         SyncMemoryCommand(),
         SendCommand(),
         InboxCommand(),
+        BroadcastCommand(),
+        SessionCommand(),
         HandoffCommand(),
         ResumeCommand(),
         SessionStartCommand(),

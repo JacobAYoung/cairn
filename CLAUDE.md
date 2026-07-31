@@ -14,6 +14,24 @@ cross-machine vault** — with cheap local-model delegation and warm-start memor
 Resolved decisions: **TOML** config · **Syncthing** default sync · name **Cairn** · **Python + pipx**
 (designed so it could later ship as a single binary). No admin ever for core features.
 
+### Messaging & identity model (know this before touching the mailbox)
+
+Cairn has **two** ways for agents to talk, both Tier-0 (files in the vault, no daemon/ports):
+
+- **Between machines** — the mailbox addresses a *machine*, whose name is `[machine].name` in
+  `cairn.toml` (default: hostname). `send` / `inbox` / `handoff` / `resume`. See SPEC Pillar 5.
+- **Between sessions on one machine** — several sessions share the vault and take distinct identities
+  via the **`$CAIRN_MACHINE`** env var, which overrides the machine name *per shell*. Adds
+  `cairn session <start|ls|whoami|end|prune>` (roster in `sessions.py`) and `cairn broadcast`. See
+  [docs/SESSIONS.md](docs/SESSIONS.md).
+
+**Identity resolution is layered like the vault root:** `$CAIRN_MACHINE` (env, wins) → `[machine].name`
+→ hostname — exactly as `$CAIRN_HOME` (env, wins) → pointer file → `~/.cairn` resolves the vault. Both
+overrides live in `system.py`; both are threaded through `_Base.config()` in `commands.py`, which is the
+**one** place commands load config — new commands get the override for free by calling `self.config()`,
+never `load_cairn_config(...)` directly. Session presence is **machine-local** (each record carries its
+`host`; listings/prune/broadcast filter to the current host) so a synced vault never mixes machines.
+
 ---
 
 ## Code Quality Standards — the definition of done for EVERY change
