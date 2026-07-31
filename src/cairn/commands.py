@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -37,7 +38,7 @@ from cairn.handoff import build_handoff_payload, latest_handoff
 from cairn.importer import import_into_vault
 from cairn.index import search as index_search
 from cairn.mailbox import inbox as read_inbox
-from cairn.mailbox import mark_read
+from cairn.mailbox import mark_read, wait_for_inbox
 from cairn.mailbox import send as send_message
 from cairn.scaffold import write_starter_config
 from cairn.session_start import build_session_start_output
@@ -397,13 +398,38 @@ class InboxCommand(_Base):
         parser.add_argument(
             "--read", action="store_true", help="mark messages read after showing them"
         )
+        parser.add_argument(
+            "--wait",
+            action="store_true",
+            help="block until a message arrives (turns inbox into a receive), then show it",
+        )
+        parser.add_argument(
+            "--timeout",
+            type=float,
+            default=None,
+            metavar="SECONDS",
+            help="with --wait, give up after this many seconds (default: wait forever)",
+        )
 
     def run(self, args: argparse.Namespace) -> int:
         vault, cfg = self.vault(), self.config()
-        make_sync_backend(cfg.sync.mode, vault.root).pull()
-        messages = read_inbox(vault, cfg.machine.name)
+        backend = make_sync_backend(cfg.sync.mode, vault.root)
+        if args.wait:
+            messages = wait_for_inbox(
+                vault,
+                cfg.machine.name,
+                now_fn=time.monotonic,
+                sleep_fn=time.sleep,
+                poll_fn=backend.pull,
+                timeout=args.timeout,
+            )
+        else:
+            backend.pull()
+            messages = read_inbox(vault, cfg.machine.name)
         if not messages:
-            print("Inbox empty.")
+            timed_out = args.wait and args.timeout is not None
+            waited = f" (waited {args.timeout:g}s)" if timed_out else ""
+            print(f"Inbox empty{waited}.")
             return 0
         for message in messages:
             print(f"— from {message.sender} ({message.filename})\n{message.body}\n")

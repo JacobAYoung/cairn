@@ -170,6 +170,11 @@ cairn broadcast "rebasing main in 5 — pause pushes"     # to every other live 
 up the roster. Presence is per-machine, so a synced vault never mixes one computer's sessions with
 another's.
 
+To have a session **wait** for the next message instead of checking on a timer, use `cairn inbox --wait`
+— it blocks until mail lands, then prints it (add `--timeout N` to give up after N seconds). It costs no
+tokens while waiting and is the building block for turn-taking between two sessions (combine with the
+`/loop` skill for a continuous back-and-forth).
+
 ---
 
 ## Recall — full-text search

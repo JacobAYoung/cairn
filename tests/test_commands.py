@@ -210,6 +210,27 @@ def test_send_then_inbox_roundtrip(env, capsys):
     assert "from testbox" in out
 
 
+def test_inbox_wait_returns_present_message_without_blocking(env, capsys):
+    # A message is already waiting, so --wait must return it on the first check (no real sleep)
+    main(["send", "testbox", "waiting for you"], commands=[env["make"](SendCommand)])
+    capsys.readouterr()
+
+    code = main(["inbox", "--wait"], commands=[env["make"](InboxCommand)])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "waiting for you" in out
+
+
+def test_inbox_wait_with_zero_timeout_reports_empty(env, capsys):
+    # Empty box + --timeout 0 must return at once rather than hang
+    code = main(["inbox", "--wait", "--timeout", "0"], commands=[env["make"](InboxCommand)])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Inbox empty (waited 0s)." in out
+
+
 def test_handoff_then_resume_carries_profile_and_brief(env, capsys):
     # Arrange: active profile + a checkpoint to carry
     main(["use", "dev-heavy"], commands=[env["make"](UseCommand)])

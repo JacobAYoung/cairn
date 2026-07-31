@@ -103,7 +103,9 @@ These are not a phase; they are the definition of done for all work.
       `cairn broadcast` (one-to-many to live peers). Design in [SESSIONS.md](SESSIONS.md). 30 tests
       (24 module + 6 CLI). Verified end-to-end.
   - [ ] **#3.3a** Surface unread mail at SessionStart (additive, best-effort — must never break a session).
-  - [ ] **#3.3b** `cairn inbox --wait [--timeout N]` blocking receive, for turn-taking between sessions.
+  - [x] **#3.3b** `cairn inbox --wait [--timeout N]` blocking receive, for turn-taking between sessions.
+        `mailbox.wait_for_inbox` (injectable clock/sleep/poll, syncs each cycle, returns on first
+        message or empty on timeout); dependency-free 1s poll. 6 tests (4 unit + 2 CLI, non-blocking).
   - [ ] **#3.3c** Optional auto-heartbeat on any command (accurate presence without explicit `session start`).
 
 ## Phase 4 — Distribution & polish
