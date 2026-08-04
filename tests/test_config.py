@@ -111,6 +111,64 @@ def test_machine_override_empty_string_is_rejected(tmp_path):
         load_cairn_config(path, default_machine_name="fallback", machine_override="")
 
 
+def test_workers_parse_both_backends_with_defaults(tmp_path):
+    path = _write(
+        tmp_path / "cairn.toml",
+        """
+        [[worker]]
+        name = "delegate"
+        backend = "claude"
+        model = "sonnet"
+        role = "heavy sub-tasks"
+
+        [[worker]]
+        name = "sum"
+        backend = "local"
+        model = "qwen2.5:14b"
+        """,
+    )
+
+    workers = load_cairn_config(path, default_machine_name="h").workers
+
+    assert [w.name for w in workers] == ["delegate", "sum"]
+    assert workers[0].backend == "claude"
+    assert workers[0].model == "sonnet"
+    assert workers[0].role == "heavy sub-tasks"
+    # local worker gets the default endpoint and empty role when omitted
+    assert workers[1].backend == "local"
+    assert workers[1].endpoint == "http://localhost:11434"
+    assert workers[1].role == ""
+
+
+def test_missing_workers_default_to_empty(tmp_path):
+    config = load_cairn_config(tmp_path / "cairn.toml", default_machine_name="h")
+    assert config.workers == ()
+
+
+def test_worker_invalid_backend_raises(tmp_path):
+    path = _write(
+        tmp_path / "cairn.toml",
+        '[[worker]]\nname = "x"\nbackend = "openai"\nmodel = "gpt"\n',
+    )
+    with pytest.raises(ConfigError, match="backend must be one of claude, local"):
+        load_cairn_config(path, default_machine_name="h")
+
+
+def test_worker_bad_name_raises(tmp_path):
+    path = _write(
+        tmp_path / "cairn.toml",
+        '[[worker]]\nname = "../evil"\nbackend = "claude"\nmodel = "sonnet"\n',
+    )
+    with pytest.raises(ConfigError, match="name must be"):
+        load_cairn_config(path, default_machine_name="h")
+
+
+def test_worker_missing_model_raises(tmp_path):
+    path = _write(tmp_path / "cairn.toml", '[[worker]]\nname = "x"\nbackend = "claude"\n')
+    with pytest.raises(ConfigError, match="model must be a non-empty string"):
+        load_cairn_config(path, default_machine_name="h")
+
+
 def test_default_profile_parsed_and_validated(tmp_path):
     ok = _write(tmp_path / "cairn.toml", '[defaults]\nprofile = "dev-heavy"\n')
     assert load_cairn_config(ok, default_machine_name="h").default_profile == "dev-heavy"

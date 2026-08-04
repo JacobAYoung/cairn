@@ -23,7 +23,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from cairn import sessions
+from cairn import sessions, workers
 from cairn.activation import activate, deactivate, read_state, resolve_bundle
 from cairn.automemory import disable as auto_disable
 from cairn.automemory import enable as auto_enable
@@ -241,6 +241,71 @@ class AskCommand(_Base):
         extra = {"post": self._post} if self._post is not None else {}
         result = Delegator(self.config().delegate, **extra).ask(args.task, args.prompt)
         print(result.text)
+        return 0
+
+
+class WorkersCommand(_Base):
+    name = "workers"
+    help = "Manage delegation workers — cheap Claude subagents + local models that save budget."
+
+    def __init__(self, *, post=None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._post = post  # injectable HTTP POST for tests of `workers run`
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        sub = parser.add_subparsers(dest="action", metavar="<action>", required=True)
+        sub.add_parser("ls", help="list configured workers (claude subagents + local models)")
+        sync = sub.add_parser("sync", help="(re)install claude-backend workers as subagents")
+        sync.add_argument(
+            "--claude-dir",
+            type=Path,
+            default=Path.home() / ".claude",
+            help="Claude Code config dir (default: ~/.claude)",
+        )
+        run = sub.add_parser("run", help="run a local-backend worker on a prompt (over HTTP)")
+        run.add_argument("name", help="worker name")
+        run.add_argument("prompt", help="the prompt text")
+
+    def run(self, args: argparse.Namespace) -> int:
+        return {"ls": self._ls, "sync": self._sync, "run": self._run}[args.action](args)
+
+    def _ls(self, args: argparse.Namespace) -> int:
+        cfg = self.config()
+        if not cfg.workers:
+            print(
+                "No workers configured. Add [[worker]] entries to cairn.toml "
+                "(see docs/DELEGATION.md)."
+            )
+            return 0
+        print("workers:")
+        for worker in cfg.workers:
+            target = (
+                f"Task subagent {workers.agent_name(worker)}"
+                if worker.backend == "claude"
+                else f"local {worker.endpoint}"
+            )
+            print(f"  {worker.name}  [{worker.backend}:{worker.model}]  -> {target}")
+            if worker.role:
+                print(f"      {worker.role}")
+        return 0
+
+    def _sync(self, args: argparse.Namespace) -> int:
+        agents_dir = args.claude_dir / "agents"
+        installed = workers.install_claude_workers(self.config().workers, agents_dir)
+        if not installed:
+            print("No claude-backend workers to install.")
+            return 0
+        print(f"Installed {len(installed)} worker subagent(s) -> {args.claude_dir / 'agents'}:")
+        for path in installed:
+            print(f"  {path.stem}")
+        return 0
+
+    def _run(self, args: argparse.Namespace) -> int:
+        worker = next((w for w in self.config().workers if w.name == args.name), None)
+        if worker is None:
+            raise CairnError(f"no worker named {args.name!r} (see `cairn workers ls`)")
+        extra = {"post": self._post} if self._post is not None else {}
+        print(workers.run_local_worker(worker, args.prompt, **extra))
         return 0
 
 
@@ -685,6 +750,12 @@ class InitCommand(_Base):
         imported = import_into_vault(vault, skills_src=skills_src, memories_src=args.memories)
         skill_dest = install_skill(claude_dir / "skills")
         hook_added = install_session_start_hook(claude_dir / "settings.json")
+        config = load_cairn_config(
+            vault.cairn_config_path,
+            default_machine_name=default_machine_name(),
+            machine_override=machine_name_override(),
+        )
+        worker_dests = workers.install_claude_workers(config.workers, claude_dir / "agents")
 
         print(f"Cairn initialized at {vault.root}")
         print(f"  config:    {', '.join(created) or 'already present'}")
@@ -694,6 +765,7 @@ class InitCommand(_Base):
         )
         print(f"  skill:     installed -> {skill_dest}")
         print(f"  hook:      {'installed' if hook_added else 'already present'} (SessionStart)")
+        print(f"  workers:   {len(worker_dests)} subagent(s) -> {claude_dir / 'agents'}")
         print("\nNext: edit the `default` profile in profiles.toml, then start a Claude session.")
         return 0
 
@@ -736,6 +808,7 @@ def all_commands() -> list:
         CheckpointCommand(),
         BriefCommand(),
         RecallCommand(),
+        WorkersCommand(),
         SyncMemoryCommand(),
         SendCommand(),
         InboxCommand(),

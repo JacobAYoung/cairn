@@ -22,12 +22,29 @@ mode = "{sync_mode}"   # off | folder | syncthing | git
 [defaults]
 profile = "default"   # auto-activated on session start when nothing else is active
 
-# Uncomment to delegate bulk/mechanical work to a local model (saves tokens):
-# [delegate]
-# enabled  = true
+# Delegation workers — cheaper models the driver hands sub-tasks to, to save budget.
+# `claude` workers become subagents in ~/.claude/agents (the driver delegates via the Task tool);
+# `local` workers run on Ollama over HTTP (`cairn workers run <name> "..."`). Adding one is pure
+# config — run `cairn workers sync` after editing. See docs/DELEGATION.md.
+[[worker]]
+name    = "delegate"
+backend = "claude"
+model   = "sonnet"
+role    = "Well-scoped sub-tasks: search many files, summarize/extract, draft, multi-file edits."
+
+[[worker]]
+name    = "delegate-fast"
+backend = "claude"
+model   = "haiku"
+role    = "Rote bulk work: formatting, extraction, bulk edits, collation, simple classification."
+
+# Example local (Ollama) worker — uncomment once Ollama is running with the model pulled:
+# [[worker]]
+# name     = "summarizer"
+# backend  = "local"
+# model    = "qwen2.5:14b"
 # endpoint = "http://localhost:11434"
-# default  = "qwen2.5:14b"
-# tasks    = {{ summarize = "qwen2.5:14b", classify = "nemotron-mini" }}
+# role     = "Summarize/extract from large text, off-API and free."
 """
 
 
