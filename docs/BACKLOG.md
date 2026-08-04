@@ -182,3 +182,31 @@ scheduled; promote into a phase when it proves worth the weight.
 **Explicitly resisting (scope discipline):** no full auto-router · no note-editing UI (Obsidian's lane) ·
 not a generic dotfile manager (`stow` exists). Every add passes: *does this make the bundle or the
 cross-machine story better?*
+
+---
+
+## Phase 6 — Generic primitives (candidates from 2026-08 deep research)
+
+Sourced from [research/generic-primitives.md](research/generic-primitives.md). Thesis: **cairn's moat
+is architectural (portable, no-daemon vault), not feature-novelty** — so own the *local-first / no-infra*
+version of problems that incumbents only solve with servers/daemons/MCP. Ranked by impact × fit. All
+unbuilt; each needs the open questions in the research doc resolved first.
+
+- [ ] **#6.1** (RANK 1) **Pre-action guardrail gate** — a deterministic, history-derived index of
+      `fragile-files` + `failed-attempts` distilled from the vault, enforced via a Claude Code
+      pre-tool-use hook that warns/blocks *before* a known-bad action. No LLM/embeddings.
+      "Memory-as-governance." Unoccupied niche, squarely in cairn's DNA (vault + hooks). *Resolve first:*
+      hook block-vs-warn semantics; concurrent-write semantics of the index across synced machines.
+- [ ] **#6.2** (RANK 2) **Local-first activity log / observability** — append-only, grep-able, git-native
+      event log of typed events (`issue/attempt/fix/decision/note`) written to the vault via hooks;
+      `cairn log` to grep/tail. No DB, no ports. Positioning: *own the no-infra niche* (not "nobody does
+      observability"). Natural substrate for #6.1.
+- [ ] **#6.3** (RANK 3) **Memory consolidation + warm-start** — evolve checkpoints into a durable
+      local-first state object (YAML frontmatter + Markdown memory list) reinjected at session start;
+      end-of-session consolidation (CLI/hook, no server) merges notes into global memory, resolving
+      conflicts and de-duping (OpenAI's own recommended pattern). *Resolve first:* reinjection token
+      budget / pruning at scale.
+- [ ] **#6.4** (RANK 4) **File-based delegation with checkpoints** — extend the worker registry to chain
+      well-scoped modules via deterministic vault-file handoffs + human/driver checkpoints. Deliberately
+      **not** autonomous swarms (reliability evidence: single-driver ≫ swarm; Project Vend). High
+      strategic fit, low effort. *Resolve first:* the delegate-vs-keep-on-Claude routing heuristic.
