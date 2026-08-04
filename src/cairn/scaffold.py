@@ -26,10 +26,13 @@ profile = "default"   # auto-activated on session start when nothing else is act
 # `claude` workers become subagents in ~/.claude/agents (the driver delegates via the Task tool);
 # `local` workers run on Ollama over HTTP (`cairn workers run <name> "..."`). Adding one is pure
 # config — run `cairn workers sync` after editing. See docs/DELEGATION.md.
+#
+# `model` takes an alias (sonnet/opus/haiku/fable — floating, tracks latest) OR a pinned full ID
+# (e.g. "claude-sonnet-4-6", "claude-opus-5") when you want an exact version.
 [[worker]]
 name    = "delegate"
 backend = "claude"
-model   = "sonnet"
+model   = "sonnet"   # or pin: model = "claude-sonnet-4-6"
 role    = "Well-scoped sub-tasks: search many files, summarize/extract, draft, multi-file edits."
 
 [[worker]]

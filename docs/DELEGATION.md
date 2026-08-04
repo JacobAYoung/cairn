@@ -42,9 +42,24 @@ role     = "Summarize/extract from large text, off-API and free."
 |---|---|
 | `name` | Worker id (safe chars). A `claude` worker becomes subagent `cairn-<name>`. |
 | `backend` | `claude` (a Claude Code subagent) or `local` (an Ollama-style HTTP model). |
-| `model` | For `claude`: the tier (`sonnet`/`haiku`/`opus`). For `local`: the Ollama model name. |
+| `model` | For `claude`: an alias **or a pinned full model ID** (see below). For `local`: the Ollama model name. |
 | `role` | One line describing what to send it — used in the generated subagent and in `workers ls`. |
 | `endpoint` | `local` only; defaults to `http://localhost:11434`. |
+
+### Pinning a model version (alias vs full ID)
+
+Cairn passes `model` through **verbatim** into the subagent's `model:` frontmatter, and Claude Code
+accepts either form there:
+
+- **Alias — floating, tracks the latest:** `sonnet`, `opus`, `haiku`, `fable`, or `inherit`.
+  `model = "sonnet"` always resolves to whatever the current Sonnet is.
+- **Full ID — pinned to a specific version:** e.g. `model = "claude-sonnet-4-6"`,
+  `model = "claude-haiku-4-5-20251001"`, `model = "claude-opus-5"`. Use this when you want a worker
+  locked to an exact version regardless of future releases.
+
+Cairn does not maintain an allowlist (that would go stale the day a new model ships) — any string you
+write is honored, so new model IDs work immediately. `cairn workers ls` prints the exact `model`
+value so you can see at a glance whether a worker is floating or pinned.
 
 ---
 
