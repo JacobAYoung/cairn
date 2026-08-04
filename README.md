@@ -22,8 +22,10 @@ local models (free tokens) and keeps warm-start notes so new sessions skip expen
 - **✨ Auto-activation** — a `SessionStart` hook loads your `default` profile (and latest note) into
   every Claude session automatically. No per-session commands.
 - **💸 Token optimizer** — two levers that cut real cost:
-  - **Local-model delegation** (`cairn ask`) — offload bulk/mechanical work to a local Ollama model
-    for *free* tokens while Claude stays the driver.
+  - **Delegation workers** (`cairn workers`) — hand well-scoped sub-tasks to cheaper models so the
+    expensive driver's budget is preserved: config-declared **Claude worker subagents** (Sonnet/Haiku
+    via the Task tool) and **local Ollama models** (free, off-API). One registry, two backends,
+    pure config. See [docs/DELEGATION.md](docs/DELEGATION.md).
   - **Warm-start** (`cairn checkpoint` / `brief`) — distill a session into a short note so the next
     one skips expensive re-exploration.
 - **🌐 Cross-machine** — one synced vault (cloud folder / Syncthing / git), synced auto-memory,
@@ -111,6 +113,7 @@ Claude for now.
 | `cairn status` | Active profile(s) + machine / vault / sync summary |
 | `cairn doctor` | Diagnose vault / config / links / sync / delegate health |
 | `cairn ask <task> "<prompt>"` | Delegate a bulk subtask to a local model (free tokens) |
+| `cairn workers ls\|sync\|run` | Delegation workers: cheap Claude subagents + local models ([docs](docs/DELEGATION.md)) |
 | `cairn checkpoint [-m ...]` | Save a warm-start note (from `-m` or stdin) |
 | `cairn brief` | Print the latest warm-start note |
 | `cairn recall "<query>"` | Full-text search across memories + warm-start notes |

@@ -80,6 +80,13 @@ These are not a phase; they are the definition of done for all work.
       trailing-slash-safe endpoint, injected POST) + `DelegateUnreachable` fail-loud ("run this task
       inline instead", exit 1). Global `[delegate].enabled` gate. 6 tests. (Deferred: per-profile
       delegate flag as an advisory layer surfaced to Claude via the skill.)
+- [x] **#2.4** Delegation workers — config-driven `[[worker]]` registry, two backends behind one
+      abstraction (`workers.py`): **claude** (renders/installs `~/.claude/agents/cairn-<name>.md` with
+      `model:` pinned to a tier; driver delegates via the Task tool) and **local** (Ollama over HTTP,
+      `cairn workers run`). `cairn workers ls|sync|run`; `init` seeds `delegate` (Sonnet) +
+      `delegate-fast` (Haiku) and syncs; skill teaches the driver to delegate. Explicit/driver-
+      controlled by design — NOT the rejected auto-router. Docs: [DELEGATION.md](DELEGATION.md).
+      18 tests (config parse, render/install idempotency, local-run payload, CLI ls/sync/run).
 - [x] **#2.2** `cairn checkpoint` / `cairn brief` — warm-start. `checkpoints.py`: newest-first,
       machine-stamped blocks in `session-notes/<project>.md`; `latest_brief` returns the newest block.
       Checkpoint reads `--message` or stdin (Claude authors it). 4 tests. (Deferred: optional local

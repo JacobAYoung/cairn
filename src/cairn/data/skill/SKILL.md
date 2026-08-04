@@ -8,19 +8,34 @@ description: Use Cairn to manage per-project skill/memory/model bundles, delegat
 Cairn is a CLI on your PATH that manages this user's Claude Code setup as toggleable, cross-machine
 bundles. Reach for these commands when relevant — they are cheap and safe.
 
-## Save tokens: delegate bulk/mechanical work to a local model
+## Save budget: delegate heavy sub-tasks to cheaper worker models
 
-When you have a **bulk or mechanical** subtask over already-loaded data — summarize a long blob,
-classify many rows, extract fields, draft boilerplate — prefer delegating it instead of spending
-API tokens:
+You (the driver) run on an expensive model. Cairn configures **workers** — cheaper models to hand
+well-scoped sub-tasks to — so your budget is spent on the reasoning and decisions only you should
+make. See what's available with `cairn workers ls`. Two kinds:
+
+**1. Claude worker subagents (default: `cairn-delegate` on Sonnet, `cairn-delegate-fast` on Haiku).**
+Spawn them with the **Task tool** instead of doing the work yourself:
+
+- **`cairn-delegate`** (Sonnet) — substantial, well-scoped sub-tasks: searching/reading across many
+  files and reporting findings, summarizing or extracting from large text, drafting boilerplate,
+  mechanical multi-file edits, running and collating test/build output.
+- **`cairn-delegate-fast`** (Haiku) — rote, high-volume work with an unambiguous answer: formatting,
+  field extraction, bulk edits, collating grep/log output, simple classification.
+
+Rule of thumb: **if a sub-task is well-defined and its bulky inputs don't need to stay in your
+context, delegate it and keep only the result.** Give the worker a self-contained task and the exact
+output shape you want back. (If `cairn workers ls` shows nothing, run `cairn workers sync`.)
+
+**2. Local models (free, off-API)** for bulk/mechanical generation when Ollama is set up:
 
 ```bash
-cairn ask <task> "<prompt>"     # e.g. cairn ask summarize "<text>"
+cairn workers run <name> "<prompt>"   # a configured local worker, e.g. summarizer
+cairn ask <task> "<prompt>"           # or the [delegate] task→model mapping
 ```
 
-It runs on a local model (free tokens) and prints the result to stdout. If it exits non-zero with
-"run this task inline instead", the local endpoint is unreachable — just do the task yourself.
-Use it for cost savings on bulk work, **not** for latency-sensitive single questions.
+If a local call exits non-zero with "run this task inline instead", the endpoint is unreachable —
+just do the task yourself. Use local delegation for cost on bulk work, not latency-sensitive asks.
 
 ## Warm-start: end and resume sessions with continuity
 

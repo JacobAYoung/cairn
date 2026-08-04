@@ -17,6 +17,7 @@ Design notes:
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +27,9 @@ from cairn.errors import ConfigError
 VALID_SYNC_MODES = ("folder", "syncthing", "git", "off")
 DEFAULT_DELEGATE_ENDPOINT = "http://localhost:11434"
 DEFAULT_BRIDGE_PORT = 8787
+VALID_WORKER_BACKENDS = ("claude", "local")
+#: Worker names become subagent filenames/addresses, so they share the mailbox's safe alphabet.
+_WORKER_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 
 @dataclass(frozen=True)
@@ -65,6 +69,24 @@ class DelegateConfig:
 
 
 @dataclass(frozen=True)
+class WorkerConfig:
+    """A delegation worker: a named, cheaper model the driver hands sub-tasks to, to save budget.
+
+    ``backend`` is ``"claude"`` (materialized as a Claude Code subagent whose ``model:`` frontmatter
+    pins the tier — the driver delegates via the Task tool) or ``"local"`` (an Ollama-style model
+    called over HTTP at ``endpoint`` via ``cairn workers run``). ``role`` is a one-line description
+    of what to send it, used in both the generated subagent and listings. Declared as ``[[worker]]``
+    array-of-tables in ``cairn.toml`` so adding one is pure config.
+    """
+
+    name: str
+    backend: str
+    model: str
+    role: str = ""
+    endpoint: str = DEFAULT_DELEGATE_ENDPOINT
+
+
+@dataclass(frozen=True)
 class BridgeConfig:
     """Tier-1 live-bridge settings. Off by default; the only port-binding feature."""
 
@@ -88,6 +110,7 @@ class CairnConfig:
     delegate: DelegateConfig
     bridge: BridgeConfig
     default_profile: str | None = None
+    workers: tuple[WorkerConfig, ...] = ()
 
 
 def _read_toml(path: Path) -> dict:
@@ -106,6 +129,34 @@ def _require_str_list(value: object, *, where: str) -> tuple[str, ...]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise ConfigError(f"{where} must be a list of strings")
     return tuple(value)
+
+
+def _parse_worker(raw: object, *, index: int) -> WorkerConfig:
+    """Validate one ``[[worker]]`` table into a :class:`WorkerConfig`, or raise ConfigError."""
+    where = f"[[worker]] #{index + 1}"
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where} must be a table")
+    name = raw.get("name")
+    if not isinstance(name, str) or not _WORKER_NAME.fullmatch(name):
+        raise ConfigError(
+            f"{where}: name must be letters/digits/._- starting alphanumeric (got {name!r})"
+        )
+    backend = raw.get("backend")
+    if backend not in VALID_WORKER_BACKENDS:
+        raise ConfigError(
+            f"{where} ({name}): backend must be one of {', '.join(VALID_WORKER_BACKENDS)}; "
+            f"got {backend!r}"
+        )
+    model = raw.get("model")
+    if not isinstance(model, str) or not model:
+        raise ConfigError(f"{where} ({name}): model must be a non-empty string")
+    role = raw.get("role", "")
+    if not isinstance(role, str):
+        raise ConfigError(f"{where} ({name}): role must be a string")
+    endpoint = raw.get("endpoint", DEFAULT_DELEGATE_ENDPOINT)
+    if not isinstance(endpoint, str) or not endpoint:
+        raise ConfigError(f"{where} ({name}): endpoint must be a non-empty string")
+    return WorkerConfig(name=name, backend=backend, model=model, role=role, endpoint=endpoint)
 
 
 def load_cairn_config(
@@ -153,6 +204,11 @@ def load_cairn_config(
     if default_profile is not None and not isinstance(default_profile, str):
         raise ConfigError("[defaults].profile must be a string")
 
+    workers_raw = data.get("worker", [])
+    if not isinstance(workers_raw, list):
+        raise ConfigError("[[worker]] must be an array of worker tables")
+    workers = tuple(_parse_worker(w, index=i) for i, w in enumerate(workers_raw))
+
     return CairnConfig(
         machine=MachineConfig(name=machine_name),
         sync=SyncConfig(mode=mode, path=sync_path),
@@ -164,6 +220,7 @@ def load_cairn_config(
         ),
         bridge=BridgeConfig(enabled=bool(bridge_raw.get("enabled", False)), port=port),
         default_profile=default_profile,
+        workers=workers,
     )
 
 

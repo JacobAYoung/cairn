@@ -35,6 +35,7 @@ from cairn.commands import (
     StatusCommand,
     SyncMemoryCommand,
     UseCommand,
+    WorkersCommand,
 )
 from cairn.system import default_machine_name
 from cairn.vault import Vault
@@ -65,6 +66,19 @@ def env(tmp_path):
         enabled = true
         default = "qwen2.5:14b"
         tasks = { summarize = "qwen-sum" }
+
+        [[worker]]
+        name = "delegate"
+        backend = "claude"
+        model = "sonnet"
+        role = "search and summarize"
+
+        [[worker]]
+        name = "sum"
+        backend = "local"
+        model = "qwen2.5:14b"
+        endpoint = "http://localhost:11434"
+        role = "summarize text"
         """
     )
     project = tmp_path / "proj"
@@ -322,6 +336,9 @@ def test_init_scaffolds_vault_and_wires_claude(env, capsys, tmp_path):
     settings = json.loads((claude_dir / "settings.json").read_text())
     hooks = settings["hooks"]["SessionStart"][0]["hooks"]
     assert hooks[0]["command"] == "cairn session-start"
+    # The seeded claude-backend workers are materialized as subagents
+    agent = (claude_dir / "agents" / "cairn-delegate.md").read_text()
+    assert "model: sonnet" in agent
 
 
 def test_session_start_emits_json_for_active_profile(env, capsys):
@@ -505,3 +522,65 @@ def test_broadcast_with_no_peers_prints_guidance(env, capsys, monkeypatch):
     assert code == 0
     assert "No other sessions registered" in out
     assert not (env["vault_root"] / "mailbox").exists()
+
+
+# --- delegation workers ---------------------------------------------------------------------
+
+
+def test_workers_ls_lists_both_backends(env, capsys):
+    code = main(["workers", "ls"], commands=[env["make"](WorkersCommand)])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "delegate  [claude:sonnet]  -> Task subagent cairn-delegate" in out
+    assert "sum  [local:qwen2.5:14b]  -> local http://localhost:11434" in out
+
+
+def test_workers_sync_installs_claude_subagents(env, capsys, tmp_path):
+    claude_dir = tmp_path / "claude"
+
+    code = main(
+        ["workers", "sync", "--claude-dir", str(claude_dir)],
+        commands=[env["make"](WorkersCommand)],
+    )
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Installed 1 worker subagent(s)" in out  # the local worker is skipped
+    assert "model: sonnet" in (claude_dir / "agents" / "cairn-delegate.md").read_text()
+    assert not (claude_dir / "agents" / "cairn-sum.md").exists()
+
+
+def test_workers_run_executes_local_worker_over_injected_post(env, capsys):
+    calls = []
+
+    def fake_post(url, payload):
+        calls.append((url, payload))
+        return {"response": "condensed"}
+
+    code = main(
+        ["workers", "run", "sum", "big blob of text"],
+        commands=[env["make"](WorkersCommand, post=fake_post)],
+    )
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert out.strip() == "condensed"
+    assert calls == [
+        ("http://localhost:11434/api/generate",
+         {"model": "qwen2.5:14b", "prompt": "big blob of text", "stream": False})
+    ]
+
+
+def test_workers_run_on_claude_worker_exits_one(env, capsys):
+    code = main(["workers", "run", "delegate", "x"], commands=[env["make"](WorkersCommand)])
+
+    assert code == 1
+    assert "delegate to it via the Task tool" in capsys.readouterr().err
+
+
+def test_workers_run_unknown_name_exits_one(env, capsys):
+    code = main(["workers", "run", "ghost", "x"], commands=[env["make"](WorkersCommand)])
+
+    assert code == 1
+    assert "no worker named 'ghost'" in capsys.readouterr().err
